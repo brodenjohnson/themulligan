@@ -1568,6 +1568,7 @@ let state = {
   recommendations: { best: [], themed: [] },
   combos: { full: [], oneAway: [], more: [] },
   manaAnalysis: null,
+  cardData: null,
 };
 
 function getApiKey() {
@@ -1812,6 +1813,20 @@ async function analyseDeck() {
   state.deckText = text;
   state.commander = cards[0];
 
+  btnText.innerHTML = '<span class="spinner"></span> Looking up cards...';
+  try {
+    state.cardData = await fetchScryfallData(cards);
+  } catch (e) {
+    state.cardData = null;
+  }
+
+  const scryfallCmc = {};
+  if (state.cardData) {
+    Object.values(state.cardData).forEach(c => {
+      if (c.cmc !== undefined) scryfallCmc[c.name.toLowerCase()] = c.cmc;
+    });
+  }
+
   const { lands, nonLands, ramp } = categoriseCards(cards);
   const colorIdentity = getColorIdentity(state.commander);
 
@@ -1825,11 +1840,39 @@ async function analyseDeck() {
   document.getElementById('statCreatures').textContent = Math.round(nonLands.length * 0.45);
   document.getElementById('statSpells').textContent = Math.round(nonLands.length * 0.55);
   document.getElementById('statLands').textContent = lands.length;
-  document.getElementById('statAvgCmc').textContent = '2.8';
+  const nonLandCmcs = nonLands.map(c => scryfallCmc[c.toLowerCase()] || 0).filter(n => n > 0);
+  const avgCmc = nonLandCmcs.length > 0 ? (nonLandCmcs.reduce((a,b) => a+b, 0) / nonLandCmcs.length).toFixed(1) : '—';
+  document.getElementById('statAvgCmc').textContent = avgCmc;
   document.getElementById('statRamp').textContent = ramp.length;
 
-  renderCurve([2, 8, 14, 12, 8, 6, 4]);
-  renderTypeBars({ Creatures: 22, Instants: 8, Sorceries: 10, Artifacts: 8, Enchantments: 7, Lands: lands.length });
+  const curveData = [0,0,0,0,0,0,0];
+  nonLands.forEach(c => {
+    const cmc = Math.min(6, Math.floor(scryfallCmc[c.toLowerCase()] || 0));
+    curveData[cmc]++;
+  });
+  renderCurve(curveData);
+  const typeCount = { Creatures: 0, Instants: 0, Sorceries: 0, Artifacts: 0, Enchantments: 0, Planeswalkers: 0, Lands: lands.length };
+  if (state.cardData) {
+    nonLands.forEach(c => {
+      const data = state.cardData[c.toLowerCase()];
+      if (!data) return;
+      const t = data.type_line || '';
+      if (t.includes('Creature')) typeCount.Creatures++;
+      else if (t.includes('Instant')) typeCount.Instants++;
+      else if (t.includes('Sorcery')) typeCount.Sorceries++;
+      else if (t.includes('Artifact')) typeCount.Artifacts++;
+      else if (t.includes('Enchantment')) typeCount.Enchantments++;
+      else if (t.includes('Planeswalker')) typeCount.Planeswalkers++;
+    });
+  } else {
+    typeCount.Creatures = Math.round(nonLands.length * 0.4);
+    typeCount.Instants = Math.round(nonLands.length * 0.15);
+    typeCount.Sorceries = Math.round(nonLands.length * 0.15);
+    typeCount.Artifacts = Math.round(nonLands.length * 0.1);
+    typeCount.Enchantments = Math.round(nonLands.length * 0.1);
+  }
+  const filteredTypes = Object.fromEntries(Object.entries(typeCount).filter(([,v]) => v > 0));
+  renderTypeBars(filteredTypes);
 
   const powerDots = document.getElementById('powerDots');
   powerDots.innerHTML = '';
@@ -1871,13 +1914,15 @@ async function analyseDeck() {
 }
 
 function buildDeckContext() {
+  const cardContext = state.cardData ? buildCardContext(state.cardData) : '';
   return `The user's Commander deck:
 Commander: ${state.commander}
 Full decklist: ${state.deck.join(', ')}
 Win condition: ${state.wincon || 'Unknown — help identify this'}
 Theme: ${state.theme || 'None specified'}
 Power level: ${state.powerLevel}/5
-Collection loaded: ${state.collectionLoaded ? 'Yes — ' + state.collection.size + ' cards' : 'No'}`;
+Collection loaded: ${state.collectionLoaded ? 'Yes — ' + state.collection.size + ' cards' : 'No'}
+${cardContext ? `\nCard oracle text (use this to understand exactly what each card does):\n${cardContext}` : ''}`;
 }
 
 async function startDeckChat(context) {
@@ -2420,6 +2465,50 @@ function parseCollection(text) {
   document.getElementById('collectionSample').textContent = sample + (cards.size > 30 ? ` ... and ${cards.size - 30} more.` : '');
 
   document.getElementById('collectionStatus').innerHTML = `<span style="color:var(--green);">✓ ${cards.size} cards loaded</span>`;
+}
+
+
+async function fetchScryfallData(cardNames) {
+  const results = {};
+  const unique = [...new Set(cardNames.map(c => c.toLowerCase()))];
+  const batchSize = 10;
+
+  for (let i = 0; i < unique.length; i += batchSize) {
+    const batch = unique.slice(i, i + batchSize);
+    await Promise.all(batch.map(async (name) => {
+      try {
+        const encoded = encodeURIComponent(name);
+        const res = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encoded}`);
+        if (res.ok) {
+          const card = await res.json();
+          results[name] = {
+            name: card.name,
+            mana_cost: card.mana_cost || '',
+            cmc: card.cmc || 0,
+            type_line: card.type_line || '',
+            oracle_text: card.oracle_text || '',
+            colors: card.colors || [],
+            color_identity: card.color_identity || [],
+            power: card.power || null,
+            toughness: card.toughness || null,
+          };
+        }
+      } catch (e) {}
+    }));
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return results;
+}
+
+function buildCardContext(cardData) {
+  if (!cardData || Object.keys(cardData).length === 0) return '';
+  const lines = Object.values(cardData).map(c => {
+    let line = `${c.name} [${c.mana_cost || '0'}] ${c.type_line}`;
+    if (c.oracle_text) line += ` — ${c.oracle_text.replace(/\n/g, ' / ')}`;
+    if (c.power) line += ` (${c.power}/${c.toughness})`;
+    return line;
+  });
+  return lines.join('\n');
 }
 
 document.addEventListener('click', e => {
