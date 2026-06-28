@@ -1881,13 +1881,6 @@ Collection loaded: ${state.collectionLoaded ? 'Yes — ' + state.collection.size
 }
 
 async function startDeckChat(context) {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    addChatMessage('assistant', "Looks like you haven't set your Anthropic API key yet. Hit the ⚙ Settings button in the top right to add it, then come back here.");
-    switchTab('chat');
-    return;
-  }
-
   const prompt = `${context}\n\nPlease introduce yourself briefly, confirm you have read the deck, and ask the three intake questions about: (1) win condition — noting it's fine if they don't know, (2) theme and how strictly to stick to it, (3) power level on a 1-5 scale.`;
 
   state.chatHistory = [{ role: 'user', content: prompt }];
@@ -1906,9 +1899,6 @@ async function startDeckChat(context) {
 }
 
 async function callClaude(systemPrompt, messages) {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('No API key set');
-
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1990,12 +1980,6 @@ async function sendChat() {
   const text = input.value.trim();
   if (!text) return;
 
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    addChatMessage('assistant', "Set your API key in ⚙ Settings first.");
-    return;
-  }
-
   input.value = '';
   input.style.height = 'auto';
   addChatMessage('user', text);
@@ -2070,10 +2054,9 @@ async function runRecommendations() {
       recs = (data.data?.recommendations || []).slice(0, 20);
     }
 
-    const apiKey = getApiKey();
     let claudeRecs = { best: [], themed: [] };
 
-    if (apiKey && recs.length > 0) {
+    if (recs.length > 0) {
       const recNames = recs.map(r => r.name).join(', ');
       const prompt = `Given this Commander deck with commander "${state.commander}", win condition "${state.wincon || 'unclear'}", and theme "${state.theme || 'none'}":
 
@@ -2255,7 +2238,6 @@ async function runManaAnalysis() {
   document.getElementById('manaEmptyState').style.display = 'none';
   document.getElementById('manaContent').style.display = 'block';
 
-  const apiKey = getApiKey();
   const landKeywords = ['swamp','island','mountain','forest','plains','land','tower','vents','falls','crypt','cavern','vale','glade','reach','lounge','passage','hideout','bluff','moor','isle','lighthouse','cliffs','quarry','bugle','industries','market','sanitarium','command tower','reliquary','desolate'];
   const lands = state.deck.filter(c => landKeywords.some(k => c.toLowerCase().includes(k)));
   const tappedLandKeywords = ['cliffs','caves','bluff','moor','isle','bloodfell','swiftwater','thriving'];
@@ -2307,7 +2289,7 @@ async function runManaAnalysis() {
     </div>`).join('');
   document.getElementById('colorPipsNote').textContent = 'Ensure you have enough sources for each colour. For a Grixis deck, aim for roughly 12-14 black sources, 8-10 blue, and 7-9 red.';
 
-  if (apiKey) {
+  {
     const prompt = `Analyse the mana base for this Commander deck:
 Commander: ${state.commander}
 Colour identity: Grixis (UBR)
@@ -2350,9 +2332,6 @@ Return JSON only:
     } catch (e) {
       document.getElementById('landRecList').innerHTML = `<div style="color:var(--text-muted);font-size:12px;">Set your API key to get personalised land recommendations.</div>`;
     }
-  } else {
-    document.getElementById('landRecList').innerHTML = `<div style="color:var(--text-muted);font-size:12px;">Set your API key in Settings to get personalised land recommendations.</div>`;
-    document.getElementById('landCutList').innerHTML = `<div style="color:var(--text-muted);font-size:12px;">Set your API key in Settings to get cut suggestions.</div>`;
   }
 }
 
