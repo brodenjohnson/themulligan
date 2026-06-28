@@ -1628,7 +1628,8 @@ function updateCardCount() {
 function switchTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
-  event.target.classList.add('active');
+  const tabBtn = document.querySelector(`.tab[onclick*="'${tab}'"]`);
+  if (tabBtn) tabBtn.classList.add('active');
   document.getElementById(`pane-${tab}`).classList.add('active');
 }
 
