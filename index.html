@@ -1794,6 +1794,19 @@ function colorHex(c) {
   return { W: '#f9f0d4', U: '#4a90d9', B: '#8b5cf6', R: '#ef4444', G: '#22c55e' }[c] || '#888';
 }
 
+function getGuildName(colors) {
+  const sorted = [...colors].sort().join('');
+  const names = {
+    'U': 'Mono-Blue', 'B': 'Mono-Black', 'R': 'Mono-Red', 'G': 'Mono-Green', 'W': 'Mono-White',
+    'BU': 'Dimir', 'BR': 'Rakdos', 'BG': 'Golgari', 'RW': 'Boros', 'GW': 'Selesnya',
+    'UW': 'Azorius', 'GU': 'Simic', 'RU': 'Izzet', 'BW': 'Orzhov', 'GR': 'Gruul',
+    'BRU': 'Grixis', 'BGU': 'Sultai', 'BGR': 'Jund', 'BRW': 'Mardu', 'BGW': 'Abzan',
+    'GRU': 'Temur', 'RUW': 'Jeskai', 'GUW': 'Bant', 'GRW': 'Naya', 'BUW': 'Esper',
+    'BGRUW': 'Five-Colour',
+  };
+  return names[sorted] || '';
+}
+
 async function analyseDeck() {
   const text = document.getElementById('deckInput').value.trim();
   if (!text) return;
@@ -1835,11 +1848,28 @@ async function analyseDeck() {
   const spells = nonLands.filter(c => !creatures.includes(c));
 
   document.getElementById('commanderName').textContent = state.commander;
-  document.getElementById('colorIdentity').textContent = colorIdentity.map(colorName).join(' / ') + ' (Grixis)';
+  const commanderData = state.cardData && (state.cardData[state.commander.toLowerCase()] || state.cardData[state.commander.split(' // ')[0].toLowerCase()]);
+  const detectedColors = commanderData?.color_identity?.length > 0
+    ? commanderData.color_identity
+    : colorIdentity;
+  const colorNames = detectedColors.map(colorName).join(' / ');
+  const guildName = getGuildName(detectedColors);
+  document.getElementById('colorIdentity').textContent = colorNames + (guildName ? ` (${guildName})` : '');
 
   document.getElementById('statTotal').textContent = cards.length;
-  document.getElementById('statCreatures').textContent = Math.round(nonLands.length * 0.45);
-  document.getElementById('statSpells').textContent = Math.round(nonLands.length * 0.55);
+  let creatureCount = 0, spellCount = 0;
+  if (state.cardData) {
+    nonLands.forEach(c => {
+      const d = state.cardData[c.toLowerCase()];
+      if (d?.type_line?.includes('Creature')) creatureCount++;
+      else spellCount++;
+    });
+  } else {
+    creatureCount = Math.round(nonLands.length * 0.45);
+    spellCount = Math.round(nonLands.length * 0.55);
+  }
+  document.getElementById('statCreatures').textContent = creatureCount;
+  document.getElementById('statSpells').textContent = spellCount;
   document.getElementById('statLands').textContent = lands.length;
   const nonLandCmcs = nonLands.map(c => scryfallCmc[c.toLowerCase()] || 0).filter(n => n > 0);
   const avgCmc = nonLandCmcs.length > 0 ? (nonLandCmcs.reduce((a,b) => a+b, 0) / nonLandCmcs.length).toFixed(1) : '—';
@@ -2190,14 +2220,23 @@ async function runCombos() {
   document.getElementById('combosMoreList').innerHTML = '';
 
   try {
+    const basicLandNames = ['swamp','island','mountain','forest','plains'];
+    const mainDeck = state.deck
+      .filter((c, i) => i > 0)
+      .filter(c => !basicLandNames.includes(c.toLowerCase()))
+      .filter((c, i, arr) => arr.indexOf(c) === i); // unique only
+
     const payload = {
       commanders: [state.commander],
-      main: state.deck.filter((c, i) => i > 0 && !['swamp','island','mountain','forest','plains'].some(b => c.toLowerCase().includes(b))),
+      main: mainDeck,
     };
 
     const response = await fetch('https://backend.commanderspellbook.com/find-my-combos/', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
       body: JSON.stringify(payload),
     });
 
@@ -2207,9 +2246,18 @@ async function runCombos() {
 
     if (response.ok) {
       const data = await response.json();
-      fullCombos = (data.results?.included || []).slice(0, 10);
-      oneAway = (data.results?.almost_included || []).filter(c => (c.missingCards?.length || 0) === 1).slice(0, 8);
-      moreThan1 = (data.results?.almost_included || []).filter(c => (c.missingCards?.length || 0) > 1).slice(0, 5);
+      // Handle both response shapes
+      const included = data.results?.included || data.included || [];
+      const almostIncluded = data.results?.almost_included || data.almost_included || [];
+      fullCombos = included.slice(0, 10);
+      oneAway = almostIncluded.filter(c => {
+        const missing = c.missingCards || c.missing_cards || [];
+        return missing.length === 1;
+      }).slice(0, 8);
+      moreThan1 = almostIncluded.filter(c => {
+        const missing = c.missingCards || c.missing_cards || [];
+        return missing.length > 1;
+      }).slice(0, 6);
     }
 
     document.getElementById('combosFullCount').textContent = fullCombos.length;
@@ -2221,8 +2269,8 @@ async function runCombos() {
       fullList.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No complete combos found in this deck.</div>';
     } else {
       fullList.innerHTML = fullCombos.map(combo => {
-        const cards = combo.uses?.map(u => u.card?.name || u.template?.name || '?') || [];
-        const result = combo.produces?.map(p => p.feature?.name || p.name || '?').join(', ') || 'Unknown result';
+        const cards = extractComboCards(combo);
+        const result = extractComboResult(combo);
         return `
           <div class="combo-card">
             <div class="combo-cards-list">
@@ -2238,9 +2286,9 @@ async function runCombos() {
       oneList.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No single-card-away combos found.</div>';
     } else {
       oneList.innerHTML = oneAway.map(combo => {
-        const cards = combo.uses?.map(u => u.card?.name || u.template?.name || '?') || [];
-        const missing = combo.missingCards?.map(c => c.card?.name || c.name || '?') || [];
-        const result = combo.produces?.map(p => p.feature?.name || p.name || '?').join(', ') || 'Unknown result';
+        const cards = extractComboCards(combo);
+        const missing = extractMissingCards(combo).map(c => c.card?.name || c.name || c || '?');
+        const result = extractComboResult(combo);
         const ownsMissing = missing.some(c => state.collection.has(c.toLowerCase()));
         return `
           <div class="combo-card">
@@ -2259,9 +2307,9 @@ async function runCombos() {
       moreList.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No other partial combos found.</div>';
     } else {
       moreList.innerHTML = moreThan1.map(combo => {
-        const cards = combo.uses?.map(u => u.card?.name || u.template?.name || '?') || [];
-        const missing = combo.missingCards?.map(c => c.card?.name || c.name || '?') || [];
-        const result = combo.produces?.map(p => p.feature?.name || p.name || '?').join(', ') || 'Unknown result';
+        const cards = extractComboCards(combo);
+        const missing = extractMissingCards(combo).map(c => c.card?.name || c.name || c || '?');
+        const result = extractComboResult(combo);
         return `
           <div class="combo-card">
             <div class="combo-cards-list">
@@ -2381,6 +2429,22 @@ Return JSON only:
   }
 }
 
+function extractComboCards(combo) {
+  if (combo.uses) return combo.uses.map(u => u.card?.name || u.template?.name || u.name || '?');
+  if (combo.cards) return combo.cards.map(c => c.name || c.card?.name || '?');
+  return [];
+}
+
+function extractComboResult(combo) {
+  if (combo.produces) return combo.produces.map(p => p.feature?.name || p.name || p).join(', ') || 'Unknown result';
+  if (combo.results) return Array.isArray(combo.results) ? combo.results.join(', ') : combo.results;
+  return 'Unknown result';
+}
+
+function extractMissingCards(combo) {
+  return combo.missingCards || combo.missing_cards || [];
+}
+
 function renderCurve(data) {
   const labels = ['0', '1', '2', '3', '4', '5', '6+'];
   const max = Math.max(...data);
@@ -2449,56 +2513,110 @@ function parseCollectionPaste() {
 function parseCollection(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l);
   const cards = new Set();
-  for (const line of lines) {
-    const parts = line.split(',');
-    const name = (parts[0] || line).replace(/^\d+\s+/, '').replace(/"/g, '').trim().toLowerCase();
-    if (name && name.length > 1) cards.add(name);
+  let isCSV = false;
+  let nameColIndex = 0;
+
+  // Detect CSV header and find name column
+  const firstLine = lines[0] || '';
+  if (firstLine.includes(',')) {
+    isCSV = true;
+    const headers = firstLine.toLowerCase().split(',').map(h => h.replace(/"/g, '').trim());
+    const nameIdx = headers.findIndex(h => h === 'name' || h === 'card name' || h === 'cardname' || h === 'title');
+    if (nameIdx >= 0) nameColIndex = nameIdx;
   }
+
+  const startLine = isCSV && lines[0].toLowerCase().includes('name') ? 1 : 0;
+
+  for (let i = startLine; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line) continue;
+
+    let name = '';
+    if (isCSV) {
+      // Handle quoted CSV fields
+      const parts = line.match(/(".*?"|[^,]+)(?=,|$)/g) || line.split(',');
+      name = (parts[nameColIndex] || parts[0] || '').replace(/"/g, '').trim();
+    } else {
+      // Plain text — strip leading quantity
+      name = line.replace(/^\d+x?\s+/, '').trim();
+    }
+
+    // Clean up and normalise
+    name = name.replace(/\s*\/\/.*$/, '').trim().toLowerCase(); // strip DFC back face
+    name = name.replace(/^[^a-z]+/, '').trim(); // strip leading non-alpha
+    if (name && name.length > 1 && !/^\d+$/.test(name)) cards.add(name);
+  }
+
   state.collection = cards;
   state.collectionLoaded = true;
 
   document.getElementById('uploadZone').classList.add('has-file');
   document.getElementById('collectionPreview').style.display = 'block';
-  document.getElementById('collectionAlert').textContent = `${cards.size} cards imported into your collection.`;
+  document.getElementById('collectionAlert').textContent = `${cards.size} unique cards imported into your collection.`;
   document.getElementById('collectionCount').textContent = `${cards.size} cards`;
 
-  const sample = Array.from(cards).slice(0, 30).join(', ');
-  document.getElementById('collectionSample').textContent = sample + (cards.size > 30 ? ` ... and ${cards.size - 30} more.` : '');
-
+  const sample = Array.from(cards).slice(0, 40).join(', ');
+  document.getElementById('collectionSample').textContent = sample + (cards.size > 40 ? ` ... and ${cards.size - 40} more.` : '');
   document.getElementById('collectionStatus').innerHTML = `<span style="color:var(--green);">✓ ${cards.size} cards loaded</span>`;
 }
 
 
 async function fetchScryfallData(cardNames) {
   const results = {};
-  const unique = [...new Set(cardNames.map(c => c.toLowerCase()))];
-  const batchSize = 10;
+  const unique = [...new Set(cardNames.map(c => c.trim()).filter(c => c))];
+  const batchSize = 75;
 
   for (let i = 0; i < unique.length; i += batchSize) {
     const batch = unique.slice(i, i + batchSize);
-    await Promise.all(batch.map(async (name) => {
-      try {
-        const encoded = encodeURIComponent(name);
-        const res = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encoded}`);
-        if (res.ok) {
-          const card = await res.json();
-          results[name] = {
+    try {
+      const res = await fetch('https://api.scryfall.com/cards/collection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifiers: batch.map(name => ({ name }))
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        (data.data || []).forEach(card => {
+          const key = card.name.toLowerCase();
+          const simpleName = card.name.split(' // ')[0].toLowerCase();
+          const oracleText = extractOracleText(card);
+          const manaCost = card.mana_cost || (card.card_faces && card.card_faces[0]?.mana_cost) || '';
+          const typeLine = card.type_line || (card.card_faces && card.card_faces[0]?.type_line) || '';
+          const cardData = {
             name: card.name,
-            mana_cost: card.mana_cost || '',
+            mana_cost: manaCost,
             cmc: card.cmc || 0,
-            type_line: card.type_line || '',
-            oracle_text: card.oracle_text || '',
-            colors: card.colors || [],
+            type_line: typeLine,
+            oracle_text: oracleText,
+            colors: card.colors || card.card_faces?.[0]?.colors || [],
             color_identity: card.color_identity || [],
-            power: card.power || null,
-            toughness: card.toughness || null,
+            power: card.power || card.card_faces?.[0]?.power || null,
+            toughness: card.toughness || card.card_faces?.[0]?.toughness || null,
           };
-        }
-      } catch (e) {}
-    }));
-    await new Promise(r => setTimeout(r, 100));
+          results[key] = cardData;
+          results[simpleName] = cardData;
+        });
+      }
+    } catch (e) {}
+    if (i + batchSize < unique.length) await new Promise(r => setTimeout(r, 150));
   }
   return results;
+}
+
+function extractOracleText(card) {
+  if (card.card_faces && card.card_faces.length > 0) {
+    return card.card_faces.map(face => {
+      let text = face.name || '';
+      if (face.mana_cost) text += ` [${face.mana_cost}]`;
+      if (face.type_line) text += ` ${face.type_line}`;
+      if (face.oracle_text) text += `: ${face.oracle_text}`;
+      if (face.power) text += ` (${face.power}/${face.toughness})`;
+      return text;
+    }).join(' // ');
+  }
+  return card.oracle_text || '';
 }
 
 function buildCardContext(cardData) {
