@@ -214,20 +214,78 @@ input::placeholder, textarea::placeholder { color: var(--ink4); }
 .view-btn.active { background: var(--black); border-color: var(--black); color: #fff; }
 .view-btn:hover:not(.active) { border-color: var(--border2); color: var(--ink); }
 
+/* VIEW TOGGLE PILL */
+.view-toggle-group {
+  display: flex; align-items: center; gap: 2px;
+  background: var(--black); border-radius: 20px; padding: 3px;
+}
+.view-toggle-btn {
+  width: 30px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 16px; cursor: pointer;
+  color: rgba(255,255,255,0.45); font-size: 14px;
+  transition: all 0.15s;
+}
+.view-toggle-btn:hover:not(.active) { color: rgba(255,255,255,0.8); }
+.view-toggle-btn.active { background: #fff; color: var(--black); }
+
 /* CARD GRID */
-.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
 .mtg-card {
   border-radius: 5px; aspect-ratio: 5/7;
   background: var(--border); border: 0.5px solid var(--border2);
   cursor: pointer; position: relative; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, transform 0.1s;
 }
-.mtg-card:hover { border-color: var(--teal); }
+.mtg-card:hover { border-color: var(--teal); transform: translateY(-2px); }
 .mtg-card img { width: 100%; height: 100%; object-fit: cover; }
-.mtg-card-name-fallback { font-size: 13px; color: var(--ink3); text-align: center; padding: 10px; line-height: 1.4; }
-.mtg-card-bottom { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); font-size: 13px; color: #fff; padding: 8px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.own-dot { position: absolute; top: 8px; right: 8px; width: 14px; height: 14px; border-radius: 50%; background: var(--teal); border: 2px solid white; }
+.mtg-card-name-fallback { font-size: 10px; color: var(--ink3); text-align: center; padding: 6px; line-height: 1.3; }
+.mtg-card-bottom { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); font-size: 10px; color: #fff; padding: 5px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.own-dot { position: absolute; top: 5px; right: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--teal); border: 1.5px solid white; }
+
+/* STACKS VIEW */
+.stacks-row { display: flex; padding: 6px 0 18px 0; overflow-x: auto; }
+.stacks-card {
+  width: 90px; aspect-ratio: 5/7; flex-shrink: 0;
+  border-radius: 6px; background: var(--border); border: 0.5px solid var(--border2);
+  margin-left: -48px; position: relative; cursor: pointer;
+  transition: transform 0.15s, margin 0.15s, z-index 0s; overflow: hidden;
+  box-shadow: -2px 0 4px rgba(0,0,0,0.08);
+}
+.stacks-card:first-child { margin-left: 0; }
+.stacks-card img { width: 100%; height: 100%; object-fit: cover; }
+.stacks-row:hover .stacks-card { margin-left: -60px; }
+.stacks-row .stacks-card:hover {
+  transform: translateY(-14px) scale(1.08);
+  z-index: 50; margin-right: 20px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+}
+.stacks-card-fallback { font-size: 9px; color: var(--ink3); text-align: center; padding: 5px; line-height: 1.3; display: flex; align-items: center; justify-content: center; height: 100%; }
+
+/* SPOILER VIEW */
+.spoiler-layout { display: flex; gap: 20px; align-items: flex-start; }
+.spoiler-preview-col { width: 280px; flex-shrink: 0; position: sticky; top: 100px; }
+.spoiler-preview-img-wrap {
+  border-radius: 10px; overflow: hidden; aspect-ratio: 5/7;
+  background: var(--card); border: 0.5px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+  display: flex; align-items: center; justify-content: center;
+}
+.spoiler-preview-img-wrap img { width: 100%; height: 100%; object-fit: cover; }
+.spoiler-preview-fallback { font-size: 13px; color: var(--ink3); text-align: center; padding: 20px; }
+.spoiler-preview-caption { margin-top: 10px; font-size: 12px; color: var(--ink2); text-align: center; }
+.spoiler-list-col { flex: 1; min-width: 0; }
+.spoiler-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--ink);
+  transition: background 0.1s;
+}
+.spoiler-row:hover, .spoiler-row.active { background: rgba(0,212,204,0.08); color: var(--black); }
+.spoiler-row-type { font-size: 11px; color: var(--ink3); width: 90px; flex-shrink: 0; }
+.spoiler-row-cmc { font-size: 11px; color: var(--ink3); width: 26px; text-align: center; flex-shrink: 0; }
+
+
 
 /* COMBO CARDS */
 .combo-card {
