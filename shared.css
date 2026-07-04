@@ -373,6 +373,8 @@ input::placeholder, textarea::placeholder { color: var(--ink4); }
 .urza-bubble p { margin-bottom: 6px; }
 .urza-bubble p:last-child { margin-bottom: 0; }
 .urza-bubble strong { color: var(--teal); font-weight: 600; }
+.chat-card-link { color: var(--teal); font-weight: 600; cursor: pointer; border-bottom: 1px dashed rgba(0,212,204,0.4); transition: border-color 0.1s; }
+.chat-card-link:hover { border-bottom-color: var(--teal); }
 .typing-dots { display: flex; gap: 4px; padding: 4px 0; }
 .typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink4); animation: td 1.2s infinite; }
 .typing-dot:nth-child(2) { animation-delay: 0.2s; }
