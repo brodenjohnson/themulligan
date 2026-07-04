@@ -482,28 +482,45 @@ function handleCollFile(event) {
 async function saveCollectionData() {
   const text = document.getElementById('collPaste').value.trim();
   if (!text) return;
-  const cards = TM.parseCollection(text);
   const statusEl = document.getElementById('collStatus');
-  statusEl.textContent = 'Validating...';
-  const cardNames = cards.map(c => c.name);
-  const validation = await TM.validateCollection(cardNames);
-  if (!validation.ok) {
+  try {
+    const cards = TM.parseCollection(text);
+    if (cards.length === 0) {
+      statusEl.style.color = 'var(--pink)';
+      statusEl.textContent = 'No cards detected. Check the file format.';
+      return;
+    }
+    statusEl.style.color = 'var(--ink3)';
+    statusEl.style.whiteSpace = 'normal';
+    statusEl.textContent = `Validating ${cards.length.toLocaleString()} cards...`;
+    const cardNames = cards.map(c => c.name);
+    const validation = await TM.validateCollection(cardNames);
+    if (!validation.ok) {
+      statusEl.style.color = 'var(--pink)';
+      statusEl.style.whiteSpace = 'pre-line';
+      statusEl.textContent = validation.error;
+      return;
+    }
+    statusEl.style.color = 'var(--ink3)';
+    statusEl.style.whiteSpace = 'normal';
+    statusEl.textContent = `Saving ${cards.length.toLocaleString()} cards...`;
+    await TM.saveCollection(cards);
+    parsedCollection = new Set(cards.map(c => c.name.toLowerCase()));
+    renderCollectionBar(cards.length);
+    if (validation.warnings?.length > 0) {
+      statusEl.style.color = 'var(--orange)';
+      statusEl.textContent = '⚠ ' + validation.warnings.join(' ');
+    } else {
+      statusEl.style.color = 'var(--teal)';
+      statusEl.textContent = `✓ ${cards.length.toLocaleString()} cards saved.`;
+    }
+    setTimeout(closeCollectionModal, 1200);
+  } catch (e) {
+    console.error(e);
     statusEl.style.color = 'var(--pink)';
     statusEl.style.whiteSpace = 'pre-line';
-    statusEl.textContent = validation.error;
-    return;
+    statusEl.textContent = 'Save failed: ' + ((e && e.message) || String(e));
   }
-  if (validation.warnings?.length > 0) {
-    statusEl.style.color = 'var(--orange)';
-    statusEl.textContent = '⚠ ' + validation.warnings.join(' ');
-  } else {
-    statusEl.style.color = 'var(--teal)';
-    statusEl.textContent = `✓ ${cards.length} cards validated and saved.`;
-  }
-  await TM.saveCollection(cards);
-  parsedCollection = new Set(cards.map(c => c.name.toLowerCase()));
-  renderCollectionBar(cards.length);
-  setTimeout(closeCollectionModal, 1200);
 }
 
 document.addEventListener('click', e => {
