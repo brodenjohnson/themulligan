@@ -802,7 +802,7 @@ Top 5 adds, top 3 cuts. Prioritise untapped dual lands. Flag if user likely owns
     });
     const data = await res.json();
     const raw = data.content?.[0]?.text || '{}';
-    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    const parsed = safeParseAIJson(raw);
     const addHtml = (parsed.add || []).map(l => {
       const owned = state.collection.has(l.name.toLowerCase());
       return `<div class="land-item"><div><div class="land-name">${l.name}</div><div class="land-reason">${l.reason}</div></div><span class="${owned ? 'badge badge-own' : 'badge badge-buy'}">${owned ? '✓ Own it' : '✗ Buy'}</span></div>`;
@@ -925,13 +925,13 @@ Return JSON only, no markdown:
 {"best":[{"name":"Card","reason":"one sentence why it fits","cmc":"2","type":"Creature"}],"themed":[{"name":"Card","reason":"one sentence","trade_off":"brief note on power vs theme trade-off"}]}`;
     const aiRes = await fetch('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1200,
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2500,
         system: 'You are an MTG deck advisor with deep, accurate knowledge of real printed Magic: The Gathering cards. You never invent or hallucinate card names. Return only valid JSON, no markdown.',
         messages: [{ role: 'user', content: prompt }] }),
     });
     const aiData = await aiRes.json();
     const raw = aiData.content?.[0]?.text || '{}';
-    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    const parsed = safeParseAIJson(raw);
 
     // Validate every recommended card against Scryfall before showing anything.
     // This is the safeguard against the AI inventing plausible-sounding fake cards.
@@ -983,6 +983,46 @@ Return JSON only, no markdown:
       </div>`;
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load recommendations</div><div class="empty-sub">${e.message}</div></div>`;
+  }
+}
+
+function safeParseAIJson(raw) {
+  const cleaned = raw.replace(/```json|```/g, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    // Response was likely truncated mid-string (hit max_tokens). Try to salvage
+    // whatever complete objects we can from each array field rather than
+    // discarding the entire response.
+    const result = {};
+    const arrayFieldRegex = /"(\w+)"\s*:\s*\[/g;
+    let m;
+    while ((m = arrayFieldRegex.exec(cleaned)) !== null) {
+      const fieldName = m[1];
+      const startIdx = m.index + m[0].length;
+      const objects = [];
+      let depth = 0, objStart = -1, inString = false, escape = false;
+      for (let i = startIdx; i < cleaned.length; i++) {
+        const ch = cleaned[i];
+        if (escape) { escape = false; continue; }
+        if (ch === '\\') { escape = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (ch === '{') { if (depth === 0) objStart = i; depth++; }
+        else if (ch === '}') {
+          depth--;
+          if (depth === 0 && objStart >= 0) {
+            const objStr = cleaned.slice(objStart, i + 1);
+            try { objects.push(JSON.parse(objStr)); } catch {}
+            objStart = -1;
+          }
+        } else if (ch === ']' && depth === 0) {
+          break;
+        }
+      }
+      if (objects.length > 0) result[fieldName] = objects;
+    }
+    return result;
   }
 }
 
