@@ -25,7 +25,13 @@ async function sbFetch(path, options = {}, isRetry = false) {
     }
     throw new Error(msg);
   }
-  return res.status === 204 ? null : res.json();
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 async function refreshSession() {
