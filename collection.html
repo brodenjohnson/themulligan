@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Mulligan — Collection</title>
+<link rel="stylesheet" href="/shared.css">
+<style>
+  .main { max-width: 1280px; margin: 0 auto; padding: 20px 24px; }
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
+  .page-title { font-size: 20px; font-weight: 700; color: var(--black); }
+  .page-sub { font-size: 13px; color: var(--ink3); margin-top: 3px; }
+
+  .toolbar { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .search-input { flex: 1; min-width: 200px; }
+  .filter-select { font-size: 12px; min-width: 130px; }
+
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .stat-card { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+  .stat-label { font-size: 11px; color: var(--ink3); margin-bottom: 4px; }
+  .stat-value { font-size: 22px; font-weight: 600; color: var(--black); line-height: 1; }
+  .stat-sub { font-size: 11px; color: var(--ink3); margin-top: 2px; }
+
+  /* LIST VIEW */
+  .list-table { width: 100%; border-collapse: collapse; }
+  .list-table th { font-size: 11px; font-weight: 600; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.4px; padding: 8px 12px; text-align: left; border-bottom: 0.5px solid var(--border); background: var(--card); position: sticky; top: 52px; z-index: 10; }
+  .list-table td { padding: 8px 12px; border-bottom: 0.5px solid var(--bg); font-size: 13px; vertical-align: middle; }
+  .list-table tr:hover td { background: rgba(0,212,204,0.03); }
+  .card-name-cell { font-weight: 500; color: var(--black); cursor: pointer; }
+  .card-name-cell:hover { color: var(--teal); }
+  .qty-cell { font-size: 13px; font-weight: 600; color: var(--black); width: 40px; text-align: center; }
+  .set-cell { font-size: 11px; color: var(--ink3); }
+  .location-cell { display: flex; flex-wrap: wrap; gap: 4px; }
+
+  /* LOCATION BADGES */
+  .loc-bulk { background: rgba(0,212,204,0.08); color: #007a76; border: 0.5px solid rgba(0,212,204,0.25); border-radius: 10px; font-size: 10px; font-weight: 500; padding: 2px 8px; }
+  .loc-deck { background: rgba(245,166,35,0.1); color: #8a6000; border: 0.5px solid rgba(245,166,35,0.3); border-radius: 10px; font-size: 10px; font-weight: 500; padding: 2px 8px; cursor: pointer; }
+  .loc-deck:hover { background: rgba(245,166,35,0.18); }
+  .loc-available { background: rgba(0,212,204,0.08); color: #007a76; border: 0.5px solid rgba(0,212,204,0.25); border-radius: 10px; font-size: 10px; padding: 2px 8px; }
+
+  /* GRID VIEW */
+  .card-grid-coll { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; }
+  .coll-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 7px; overflow: hidden; cursor: pointer; transition: border-color 0.15s; position: relative; }
+  .coll-card:hover { border-color: var(--teal); }
+  .coll-card-img { aspect-ratio: 5/7; background: var(--border); overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .coll-card-img img { width: 100%; height: 100%; object-fit: cover; }
+  .coll-card-img-fallback { font-size: 8px; color: var(--ink3); text-align: center; padding: 6px; line-height: 1.3; }
+  .coll-card-footer { padding: 5px 7px; }
+  .coll-card-name { font-size: 9px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
+  .coll-card-locs { display: flex; flex-wrap: wrap; gap: 2px; }
+  .coll-qty-badge { position: absolute; top: 4px; left: 4px; background: rgba(0,0,0,0.7); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px; }
+  .coll-status-dot { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #fff; }
+  .dot-bulk { background: var(--teal); }
+  .dot-deck { background: var(--orange); }
+  .dot-both { background: linear-gradient(135deg, var(--teal) 50%, var(--orange) 50%); }
+
+  /* EMPTY / UPLOAD */
+  .upload-empty { text-align: center; padding: 60px 24px; background: var(--card); border: 1px dashed var(--border2); border-radius: var(--radius-lg); }
+  .upload-empty-icon { font-size: 48px; margin-bottom: 12px; color: var(--ink4); }
+  .upload-empty-title { font-size: 16px; font-weight: 600; color: var(--ink2); margin-bottom: 6px; }
+  .upload-empty-sub { font-size: 13px; color: var(--ink3); margin-bottom: 20px; line-height: 1.5; }
+
+  /* PAGINATION */
+  .pagination { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; padding: 10px 0; }
+  .page-info { font-size: 12px; color: var(--ink3); }
+  .page-btns { display: flex; gap: 4px; }
+  .page-btn { width: 30px; height: 30px; background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 12px; color: var(--ink2); transition: all 0.1s; }
+  .page-btn:hover { border-color: var(--teal); color: var(--teal); }
+  .page-btn.active { background: var(--black); border-color: var(--black); color: #fff; }
+  .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .loading-state { text-align: center; padding: 40px; color: var(--ink3); }
+
+  @media (max-width: 768px) {
+    .card-grid-coll { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="/" class="logo-wrap">
+    <div><div class="logo-text"><span class="the">the</span> Mulligan</div></div>
+    <div class="logo-dashes"><div class="ld ld1"></div><div class="ld ld2"></div><div class="ld ld3"></div></div>
+  </a>
+  <div class="topbar-nav">
+    <a href="/" class="nav-link">Your decks</a>
+    <a href="/collection" class="nav-link active">Collection</a>
+  </div>
+  <div class="topbar-right">
+    <span id="userEmail" style="font-size:12px;color:var(--ink3);"></span>
+    <div class="avatar" id="userAvatar" onclick="TM.signOut()">B</div>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Your collection</div>
+      <div class="page-sub" id="pageSubtitle">Loading...</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost" onclick="openUploadModal()">
+        <i class="ti ti-upload" aria-hidden="true"></i> Upload collection
+      </button>
+      <button class="btn btn-primary" onclick="openUploadModal()">
+        <i class="ti ti-refresh" aria-hidden="true"></i> Re-sync
+      </button>
+    </div>
+  </div>
+
+  <div class="stats-row" id="statsRow" style="display:none;">
+    <div class="stat-card"><div class="stat-label">Total cards</div><div class="stat-value" id="statTotal">—</div><div class="stat-sub">across all copies</div></div>
+    <div class="stat-card"><div class="stat-label">Unique cards</div><div class="stat-value" id="statUnique">—</div></div>
+    <div class="stat-card"><div class="stat-label">In bulk</div><div class="stat-value" id="statBulk">—</div><div class="stat-sub">available to use</div></div>
+    <div class="stat-card"><div class="stat-label">In decks</div><div class="stat-value" id="statInDecks">—</div><div class="stat-sub">currently sleeved</div></div>
+    <div class="stat-card"><div class="stat-label">Decks tracked</div><div class="stat-value" id="statDecks">—</div></div>
+  </div>
+
+  <div class="toolbar" id="toolbarRow" style="display:none;">
+    <input type="text" class="search-input" id="searchInput" placeholder="Search cards..." oninput="debouncedRender()">
+    <select class="filter-select" id="filterLocation" onchange="renderPage()">
+      <option value="">All locations</option>
+      <option value="bulk">Bulk only</option>
+      <option value="decks">In decks only</option>
+    </select>
+    <select class="filter-select" id="filterDeck" onchange="renderPage()">
+      <option value="">All decks</option>
+    </select>
+    <select class="filter-select" id="sortBy" onchange="renderPage()">
+      <option value="name">Sort: name</option>
+      <option value="qty-desc">Sort: most copies</option>
+      <option value="qty-asc">Sort: fewest copies</option>
+    </select>
+    <div style="margin-left:auto;display:flex;gap:4px;">
+      <div class="view-btn active" id="vbList" onclick="setView('list')" title="List view"><i class="ti ti-list" aria-hidden="true"></i></div>
+      <div class="view-btn" id="vbGrid" onclick="setView('grid')" title="Grid view"><i class="ti ti-layout-grid" aria-hidden="true"></i></div>
+    </div>
+  </div>
+
+  <div id="mainContent">
+    <div class="loading-state"><span class="spinner"></span></div>
+  </div>
+
+  <div class="pagination" id="paginationRow" style="display:none;">
+    <div class="page-info" id="pageInfo"></div>
+    <div class="page-btns" id="pageBtns"></div>
+  </div>
+</div>
+
+<!-- UPLOAD MODAL -->
+<div class="modal-overlay" id="uploadModal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-title">Upload collection</div>
+    <p style="font-size:13px;color:var(--ink3);margin-bottom:8px;line-height:1.5;">Export from Mythic Tools: <strong>Collection → Export</strong>. The CSV includes Qty, Name, Set, and Listed In columns which track bulk vs deck locations automatically.</p>
+    <p style="font-size:12px;color:var(--ink3);margin-bottom:16px;">Also supports Moxfield CSV, Archidekt CSV, or plain text (one card per line).</p>
+    <div style="margin-bottom:12px;">
+      <label style="display:block;font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:5px;">Upload CSV or TXT file</label>
+      <input type="file" id="collFile" accept=".csv,.txt" style="width:100%;" onchange="handleFile(event)">
+    </div>
+    <div style="text-align:center;color:var(--ink4);font-size:12px;margin:10px 0;">or paste below</div>
+    <textarea id="collPaste" rows="8" placeholder="Paste CSV or card names here..." style="width:100%;font-family:monospace;font-size:12px;margin-bottom:12px;"></textarea>
+    <div id="uploadStatus" style="font-size:12px;margin-bottom:12px;min-height:18px;white-space:pre-line;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeUploadModal()">Cancel</button>
+      <button class="btn btn-primary" id="uploadSaveBtn" onclick="saveUpload()">Save collection</button>
+    </div>
+  </div>
+</div>
+
+<!-- CARD DETAIL MODAL -->
+<div class="modal-overlay" id="cardDetailModal">
+  <div class="modal" style="max-width:500px;display:flex;padding:0;overflow:hidden;">
+    <div style="width:160px;flex-shrink:0;background:var(--black);">
+      <img id="cdImg" src="" alt="" style="width:100%;display:none;">
+      <div id="cdImgFallback" style="height:224px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:11px;padding:12px;text-align:center;"></div>
+    </div>
+    <div style="padding:18px;flex:1;overflow-y:auto;max-height:70vh;">
+      <button onclick="closeCardDetail()" style="float:right;background:none;border:none;font-size:18px;color:var(--ink3);cursor:pointer;line-height:1;">×</button>
+      <div style="font-size:15px;font-weight:700;color:var(--black);margin-bottom:4px;" id="cdName"></div>
+      <div style="font-size:11px;color:var(--ink3);margin-bottom:8px;" id="cdType"></div>
+      <div style="font-size:11px;color:var(--ink);line-height:1.6;margin-bottom:12px;white-space:pre-wrap;" id="cdText"></div>
+      <div style="font-size:12px;font-weight:600;color:var(--black);margin-bottom:8px;">Your copies</div>
+      <div id="cdCopies" style="font-size:12px;color:var(--ink2);line-height:1.8;"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/shared.js"></script>
+<script>
+const session = TM.requireAuth();
+if (!session) throw new Error('redirect');
+
+document.getElementById('userAvatar').textContent = (session.user.email?.[0] || 'U').toUpperCase();
+document.getElementById('userEmail').textContent = session.user.email;
+
+let state = {
+  rawItems: [],       // array of {name, quantity, set, listedIn}
+  lookup: {},         // { nameLower: { name, total, bulk, decks: {deckName: count} } }
+  uniqueCards: [],    // sorted unique card names
+  filtered: [],       // after search/filter
+  currentView: 'list',
+  currentPage: 1,
+  pageSize: 50,
+  cardDataCache: {},
+};
+
+const DECK_COLORS = ['#F5A623','#00D4CC','#FF3B6B','#8b5cf6','#22c55e','#ef4444','#4a90d9'];
+const deckColorMap = {};
+function getDeckColor(deckName) {
+  if (!deckColorMap[deckName]) {
+    const idx = Object.keys(deckColorMap).length % DECK_COLORS.length;
+    deckColorMap[deckName] = DECK_COLORS[idx];
+  }
+  return deckColorMap[deckName];
+}
+
+async function init() {
+  try {
+    const raw = await TM.getCollection();
+    if (!raw || raw.length === 0) {
+      showEmpty();
+      return;
+    }
+    // Handle legacy format (array of strings) and new format (array of objects)
+    state.rawItems = raw.map(r => typeof r === 'string' ? { name: r, quantity: 1, set: '', listedIn: 'Bulk' } : r);
+    buildLookup();
+    renderStats();
+    populateFilters();
+    applyFilters();
+    document.getElementById('statsRow').style.display = 'grid';
+    document.getElementById('toolbarRow').style.display = 'flex';
+  } catch (e) {
+    document.getElementById('mainContent').innerHTML = `<div class="loading-state" style="color:var(--pink);">Error loading collection: ${e.message}</div>`;
+  }
+}
+
+function buildLookup() {
+  state.lookup = {};
+  for (const item of state.rawItems) {
+    const key = item.name.toLowerCase().replace(/\s*\/\/.*$/, '').trim();
+    if (!state.lookup[key]) state.lookup[key] = { name: item.name, total: 0, bulk: 0, decks: {}, sets: [], items: [] };
+    state.lookup[key].total++;
+    state.lookup[key].items.push(item);
+    const loc = (item.listedIn || 'Bulk').trim();
+    if (loc.toLowerCase() === 'bulk') state.lookup[key].bulk++;
+    else state.lookup[key].decks[loc] = (state.lookup[key].decks[loc] || 0) + 1;
+    if (item.set && !state.lookup[key].sets.includes(item.set)) state.lookup[key].sets.push(item.set);
+  }
+  state.uniqueCards = Object.keys(state.lookup).sort();
+}
+
+function renderStats() {
+  const total = state.rawItems.length;
+  const unique = state.uniqueCards.length;
+  const bulk = state.rawItems.filter(r => (r.listedIn || 'Bulk').toLowerCase() === 'bulk').length;
+  const inDecks = total - bulk;
+  const deckNames = new Set(state.rawItems.map(r => r.listedIn).filter(l => l && l.toLowerCase() !== 'bulk'));
+  document.getElementById('statTotal').textContent = total.toLocaleString();
+  document.getElementById('statUnique').textContent = unique.toLocaleString();
+  document.getElementById('statBulk').textContent = bulk.toLocaleString();
+  document.getElementById('statInDecks').textContent = inDecks.toLocaleString();
+  document.getElementById('statDecks').textContent = deckNames.size;
+  document.getElementById('pageSubtitle').textContent = `${total.toLocaleString()} cards · ${unique.toLocaleString()} unique · ${deckNames.size} deck${deckNames.size !== 1 ? 's' : ''} tracked`;
+}
+
+function populateFilters() {
+  const deckNames = [...new Set(state.rawItems.map(r => r.listedIn).filter(l => l && l.toLowerCase() !== 'bulk'))].sort();
+  const sel = document.getElementById('filterDeck');
+  deckNames.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d; opt.textContent = d;
+    sel.appendChild(opt);
+  });
+}
+
+function applyFilters() {
+  const search = document.getElementById('searchInput').value.toLowerCase().trim();
+  const locFilter = document.getElementById('filterLocation').value;
+  const deckFilter = document.getElementById('filterDeck').value;
+  const sortBy = document.getElementById('sortBy').value;
+
+  let cards = state.uniqueCards.map(k => state.lookup[k]);
+
+  if (search) cards = cards.filter(c => c.name.toLowerCase().includes(search));
+  if (locFilter === 'bulk') cards = cards.filter(c => c.bulk > 0);
+  if (locFilter === 'decks') cards = cards.filter(c => Object.keys(c.decks).length > 0);
+  if (deckFilter) cards = cards.filter(c => c.decks[deckFilter] > 0);
+
+  if (sortBy === 'qty-desc') cards.sort((a, b) => b.total - a.total);
+  else if (sortBy === 'qty-asc') cards.sort((a, b) => a.total - b.total);
+  else cards.sort((a, b) => a.name.localeCompare(b.name));
+
+  state.filtered = cards;
+  state.currentPage = 1;
+  renderPage();
+}
+
+let debounceTimer;
+function debouncedRender() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(applyFilters, 200);
+}
+
+function renderPage() {
+  const total = state.filtered.length;
+  const pages = Math.ceil(total / state.pageSize);
+  const start = (state.currentPage - 1) * state.pageSize;
+  const pageItems = state.filtered.slice(start, start + state.pageSize);
+
+  const content = document.getElementById('mainContent');
+  if (total === 0) {
+    content.innerHTML = '<div class="empty-state"><div class="empty-title">No cards found</div><div class="empty-sub">Try adjusting your search or filters.</div></div>';
+    document.getElementById('paginationRow').style.display = 'none';
+    return;
+  }
+
+  if (state.currentView === 'list') {
+    renderListView(content, pageItems);
+  } else {
+    renderGridView(content, pageItems);
+  }
+
+  // Pagination
+  const pag = document.getElementById('paginationRow');
+  pag.style.display = 'flex';
+  document.getElementById('pageInfo').textContent = `Showing ${start + 1}–${Math.min(start + state.pageSize, total)} of ${total.toLocaleString()} cards`;
+  const btns = document.getElementById('pageBtns');
+  btns.innerHTML = '';
+  const makeBtn = (label, page, disabled, active) => {
+    const b = document.createElement('button');
+    b.className = 'page-btn' + (active ? ' active' : '');
+    b.textContent = label;
+    b.disabled = disabled;
+    if (!disabled) b.onclick = () => { state.currentPage = page; renderPage(); window.scrollTo(0, 0); };
+    return b;
+  };
+  btns.appendChild(makeBtn('‹', state.currentPage - 1, state.currentPage === 1, false));
+  const maxPages = Math.min(pages, 7);
+  let startP = Math.max(1, state.currentPage - 3);
+  let endP = Math.min(pages, startP + maxPages - 1);
+  startP = Math.max(1, endP - maxPages + 1);
+  for (let p = startP; p <= endP; p++) btns.appendChild(makeBtn(p, p, false, p === state.currentPage));
+  btns.appendChild(makeBtn('›', state.currentPage + 1, state.currentPage === pages, false));
+}
+
+function locationBadges(card) {
+  const badges = [];
+  if (card.bulk > 0) badges.push(`<span class="loc-bulk">${card.bulk > 1 ? card.bulk + '× ' : ''}Bulk</span>`);
+  Object.entries(card.decks).forEach(([deck, count]) => {
+    const color = getDeckColor(deck);
+    badges.push(`<span class="loc-deck" style="background:${color}18;color:${color};border-color:${color}44;" onclick="filterByDeck('${deck.replace(/'/g,"\\'")}')">
+      ${count > 1 ? count + '× ' : ''}${deck}
+    </span>`);
+  });
+  return badges.join('');
+}
+
+function renderListView(container, items) {
+  let html = `<div style="background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;">
+    <table class="list-table">
+      <thead><tr>
+        <th style="width:40px;">Qty</th>
+        <th>Card name</th>
+        <th style="width:180px;">Set</th>
+        <th>Location</th>
+      </tr></thead>
+      <tbody>`;
+  items.forEach(card => {
+    const img = state.cardDataCache[card.name.toLowerCase()]?.image_uris?.small || '';
+    html += `<tr>
+      <td class="qty-cell">${card.total}</td>
+      <td class="card-name-cell" onclick="openCardDetail('${card.name.replace(/'/g,"\\'")}')">
+        ${card.name}
+        ${card.total > 1 && card.bulk > 0 && Object.keys(card.decks).length > 0 ? '<span style="font-size:10px;color:var(--teal);margin-left:4px;">split</span>' : ''}
+      </td>
+      <td class="set-cell">${card.sets.slice(0,2).join(', ')}${card.sets.length > 2 ? ' +' + (card.sets.length - 2) : ''}</td>
+      <td class="location-cell">${locationBadges(card)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+function renderGridView(container, items) {
+  let html = '<div class="card-grid-coll">';
+  items.forEach(card => {
+    const d = state.cardDataCache[card.name.toLowerCase()];
+    const img = d?.image_uris?.normal || '';
+    const hasBulk = card.bulk > 0;
+    const hasDecks = Object.keys(card.decks).length > 0;
+    const dotClass = hasBulk && hasDecks ? 'dot-both' : hasBulk ? 'dot-bulk' : 'dot-deck';
+    const miniLocs = [];
+    if (card.bulk > 0) miniLocs.push(`<span style="font-size:8px;background:rgba(0,212,204,0.1);color:#007a76;border-radius:8px;padding:1px 5px;">${card.bulk > 1 ? card.bulk + '× ' : ''}Bulk</span>`);
+    Object.entries(card.decks).slice(0,2).forEach(([deck, cnt]) => {
+      const color = getDeckColor(deck);
+      miniLocs.push(`<span style="font-size:8px;background:${color}18;color:${color};border-radius:8px;padding:1px 5px;">${cnt > 1 ? cnt + '× ' : ''}${deck.split(' ')[0]}</span>`);
+    });
+    html += `<div class="coll-card" onclick="openCardDetail('${card.name.replace(/'/g,"\\'")}')">
+      <div class="coll-card-img">${img ? `<img src="${img}" alt="${card.name}" loading="lazy">` : `<div class="coll-card-img-fallback">${card.name}</div>`}</div>
+      ${card.total > 1 ? `<div class="coll-qty-badge">${card.total}</div>` : ''}
+      <div class="coll-status-dot ${dotClass}"></div>
+      <div class="coll-card-footer">
+        <div class="coll-card-name">${card.name}</div>
+        <div class="coll-card-locs">${miniLocs.join('')}</div>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+  container.innerHTML = html;
+  loadGridImages(items);
+}
+
+async function loadGridImages(items) {
+  const missing = items.filter(c => !state.cardDataCache[c.name.toLowerCase()]).map(c => c.name);
+  if (missing.length === 0) return;
+  try {
+    const data = await TM.fetchScryfallBulk(missing.slice(0, 75));
+    Object.assign(state.cardDataCache, data);
+    // Update images in place
+    items.forEach(card => {
+      const d = state.cardDataCache[card.name.toLowerCase()];
+      if (!d?.image_uris?.normal) return;
+      const imgs = document.querySelectorAll('.coll-card-img img');
+      imgs.forEach(img => { if (img.alt === card.name && !img.src) img.src = d.image_uris.normal; });
+    });
+  } catch (e) {}
+}
+
+function openCardDetail(name) {
+  const card = state.lookup[name.toLowerCase().replace(/\s*\/\/.*$/, '').trim()];
+  if (!card) return;
+  document.getElementById('cdName').textContent = card.name;
+  const d = state.cardDataCache[name.toLowerCase()];
+  document.getElementById('cdType').textContent = d?.type_line || '';
+  document.getElementById('cdText').textContent = (d?.oracle_text || '').replace(/ \/\/ /g, '\n\n— Back face —\n\n');
+  const img = d?.image_uris?.normal || '';
+  const cdImg = document.getElementById('cdImg');
+  const cdFallback = document.getElementById('cdImgFallback');
+  if (img) { cdImg.src = img; cdImg.style.display = 'block'; cdFallback.style.display = 'none'; }
+  else { cdImg.style.display = 'none'; cdFallback.style.display = 'flex'; cdFallback.textContent = card.name; }
+  // Build copies list
+  let copiesHtml = '';
+  if (card.bulk > 0) copiesHtml += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span class="loc-bulk">${card.bulk > 1 ? card.bulk + ' copies' : '1 copy'}</span><span style="color:var(--ink3);">in bulk — available</span></div>`;
+  Object.entries(card.decks).forEach(([deck, count]) => {
+    const color = getDeckColor(deck);
+    copiesHtml += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="background:${color}18;color:${color};border:0.5px solid ${color}44;border-radius:10px;font-size:10px;padding:2px 8px;">${count > 1 ? count + ' copies' : '1 copy'}</span><span style="color:var(--ink3);">in <strong>${deck}</strong></span></div>`;
+  });
+  const sets = card.sets.join(', ') || 'Unknown set';
+  copiesHtml += `<div style="font-size:11px;color:var(--ink4);margin-top:8px;">Set${card.sets.length > 1 ? 's' : ''}: ${sets}</div>`;
+  document.getElementById('cdCopies').innerHTML = copiesHtml;
+  document.getElementById('cardDetailModal').classList.add('open');
+  // Load card data if not cached
+  if (!d) {
+    TM.fetchScryfallBulk([name]).then(data => {
+      Object.assign(state.cardDataCache, data);
+      const fresh = data[name.toLowerCase()];
+      if (fresh?.image_uris?.normal) { cdImg.src = fresh.image_uris.normal; cdImg.style.display = 'block'; cdFallback.style.display = 'none'; }
+      document.getElementById('cdType').textContent = fresh?.type_line || '';
+      document.getElementById('cdText').textContent = (fresh?.oracle_text || '').replace(/ \/\/ /g, '\n\n— Back face —\n\n');
+    }).catch(() => {});
+  }
+}
+
+function closeCardDetail() { document.getElementById('cardDetailModal').classList.remove('open'); }
+
+function filterByDeck(deckName) {
+  document.getElementById('filterDeck').value = deckName;
+  applyFilters();
+}
+
+function setView(v) {
+  state.currentView = v;
+  document.getElementById('vbList').classList.toggle('active', v === 'list');
+  document.getElementById('vbGrid').classList.toggle('active', v === 'grid');
+  renderPage();
+}
+
+function showEmpty() {
+  document.getElementById('pageSubtitle').textContent = 'No collection uploaded yet';
+  document.getElementById('mainContent').innerHTML = `
+    <div class="upload-empty">
+      <div class="upload-empty-icon"><i class="ti ti-cards" aria-hidden="true"></i></div>
+      <div class="upload-empty-title">No collection yet</div>
+      <div class="upload-empty-sub">Upload your collection from Mythic Tools, Moxfield, or Archidekt.<br>Supports CSV with Qty, Name, Set, and Listed In columns.</div>
+      <button class="btn btn-primary" onclick="openUploadModal()"><i class="ti ti-upload" aria-hidden="true"></i> Upload collection</button>
+    </div>`;
+}
+
+function openUploadModal() { document.getElementById('uploadModal').classList.add('open'); }
+function closeUploadModal() { document.getElementById('uploadModal').classList.remove('open'); }
+
+function handleFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('collPaste').value = e.target.result;
+    const cards = TM.parseCollection(e.target.result);
+    const unique = new Set(cards.map(c => c.name.toLowerCase())).size;
+    document.getElementById('uploadStatus').style.color = 'var(--ink3)';
+    document.getElementById('uploadStatus').textContent = `Detected ${cards.length} total cards · ${unique} unique`;
+  };
+  reader.readAsText(file);
+}
+
+async function saveUpload() {
+  const text = document.getElementById('collPaste').value.trim();
+  if (!text) return;
+  const cards = TM.parseCollection(text);
+  const statusEl = document.getElementById('uploadStatus');
+  statusEl.style.color = 'var(--ink3)';
+  statusEl.textContent = 'Validating with Scryfall...';
+  const btn = document.getElementById('uploadSaveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  const validation = await TM.validateCollection(cards.map(c => c.name));
+  if (!validation.ok) {
+    statusEl.style.color = 'var(--pink)';
+    statusEl.textContent = validation.error;
+    btn.disabled = false;
+    btn.textContent = 'Save collection';
+    return;
+  }
+  statusEl.style.color = 'var(--ink3)';
+  statusEl.textContent = 'Saving...';
+  await TM.saveCollection(cards);
+  statusEl.style.color = 'var(--teal)';
+  const unique = new Set(cards.map(c => c.name.toLowerCase())).size;
+  statusEl.textContent = `✓ ${cards.length} cards saved (${unique} unique)`;
+  btn.disabled = false;
+  btn.textContent = 'Save collection';
+  setTimeout(() => {
+    closeUploadModal();
+    window.location.reload();
+  }, 1200);
+}
+
+document.addEventListener('click', e => {
+  if (e.target === document.getElementById('uploadModal')) closeUploadModal();
+  if (e.target === document.getElementById('cardDetailModal')) closeCardDetail();
+});
+
+init();
+</script>
+</body>
+</html>
