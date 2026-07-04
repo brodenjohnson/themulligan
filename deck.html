@@ -41,12 +41,15 @@
   .cm-close { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 20px; cursor: pointer; color: var(--ink3); line-height: 1; }
 
   /* RECOMMENDATIONS */
-  .rec-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .rec-layout { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
   .rec-col-header { font-size: 11px; font-weight: 600; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 
   /* COMBOS */
   .combo-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; margin-top: 20px; }
   .combo-section-header:first-child { margin-top: 0; }
+  .accordion-header { display: flex; align-items: center; gap: 8px; padding: 10px 4px; cursor: pointer; user-select: none; }
+  .accordion-chevron { display: inline-block; font-size: 14px; color: var(--ink3); transition: transform 0.15s; }
+  .accordion-panel { padding: 4px 0 8px; }
   .combo-status { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 10px; border: 0.5px solid; }
   .cs-complete { background: rgba(0,212,204,0.1); color: #007a76; border-color: rgba(0,212,204,0.3); }
   .cs-one { background: rgba(245,166,35,0.1); color: #8a6000; border-color: rgba(245,166,35,0.3); }
@@ -323,11 +326,33 @@ const deckId = window.location.pathname.split('/deck/')[1];
 if (!deckId) window.location.href = '/';
 
 let state = {
-  deck: null, cards: [], cardData: {}, collection: new Set(),
+  deck: null, cards: [], cardData: {}, collection: new Set(), collectionRaw: [],
   chatHistory: [], currentView: 'grid', deckAnalysed: false,
   wincon: '', theme: '', powerLevel: 3,
   recsSummary: null, combosSummary: null,
+  combosPromise: null, recsPromise: null,
 };
+
+const CACHE_KEY = `mulligan_cache_v2_${deckId}`;
+
+function getDeckCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function setDeckCache(partial) {
+  try {
+    const existing = getDeckCache() || {};
+    const merged = { ...existing, ...partial, cardlist: state.deck?.cardlist || '' };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(merged));
+  } catch (e) { console.warn('Cache write failed (collection may be large)', e); }
+}
+
+function cacheIsValid(cache) {
+  return !!(cache && state.deck && cache.cardlist === state.deck.cardlist);
+}
 
 async function init() {
   try {
@@ -338,25 +363,49 @@ async function init() {
     state.wincon = deck.win_con || '';
     state.theme = deck.theme || '';
     state.powerLevel = deck.power_level || 3;
-    state.collection = new Set((collection || []).map(c => {
-      const name = typeof c === 'string' ? c : (c.name || '');
-      return name.toLowerCase().replace(/\s*\/\/.*$/, '').trim();
-    }));
+    state.collectionRaw = (collection || []).map(c => typeof c === 'string' ? { name: c, quantity: 1, listedIn: 'Bulk' } : c);
+    state.collection = new Set(state.collectionRaw.map(c => (c.name || '').toLowerCase().replace(/\s*\/\/.*$/, '').trim()));
     document.getElementById('deckBanner').style.display = 'flex';
     document.getElementById('deckTabs').style.display = 'flex';
     document.getElementById('bannerTitle').textContent = state.deck.name || state.cards[0] || 'Deck';
     renderBannerSub();
     document.title = `The Mulligan — ${state.deck.name || state.cards[0]}`;
     document.getElementById('chatBadge').textContent = state.cards[0] || 'Deck';
-    const loading = document.getElementById('cardsBody');
-    loading.innerHTML = '<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Loading card data...</div></div>';
-    state.cardData = await TM.fetchScryfallBulk(state.cards);
+
+    const cache = getDeckCache();
+    const validCache = cacheIsValid(cache);
+
+    if (validCache && cache.cardData) {
+      state.cardData = cache.cardData;
+    } else {
+      const loading = document.getElementById('cardsBody');
+      loading.innerHTML = '<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Loading card data...</div></div>';
+      state.cardData = await TM.fetchScryfallBulk(state.cards);
+      setDeckCache({ cardData: state.cardData });
+    }
     state.deckAnalysed = true;
     renderCardsTab();
     renderStats();
     renderManaBase();
-    runCombos();
-    runRecommendations();
+
+    if (validCache && cache.combosHtml) {
+      document.getElementById('combosBody').innerHTML = cache.combosHtml;
+      state.combosSummary = cache.combosSummary || null;
+      state.combosPromise = Promise.resolve();
+      attachRefreshHandlers();
+    } else {
+      state.combosPromise = runCombos();
+    }
+
+    if (validCache && cache.recsHtml) {
+      document.getElementById('recsContent').innerHTML = cache.recsHtml;
+      state.recsSummary = cache.recsSummary || null;
+      state.recsPromise = Promise.resolve();
+      attachRefreshHandlers();
+    } else {
+      state.recsPromise = runRecommendations();
+    }
+
     if (Array.isArray(deck.chat_history) && deck.chat_history.length > 0) {
       loadChatHistory(deck.chat_history);
     } else {
@@ -369,6 +418,23 @@ async function init() {
       errBody.innerHTML = '<div class="empty-state"><div class="empty-title" style="color:var(--pink);">Something went wrong loading this deck</div><div class="empty-sub" style="margin-top:10px;font-family:monospace;font-size:11px;text-align:left;background:var(--card);padding:12px;border-radius:8px;border:0.5px solid var(--border);white-space:pre-wrap;">' + ((e && e.message) || String(e)) + (e && e.stack ? '\n\n' + e.stack.split('\n').slice(0,5).join('\n') : '') + '</div></div>';
     }
   }
+}
+
+function getCommanderColorIdentity() {
+  const commander = state.cards[0] || '';
+  const d = state.cardData[commander.toLowerCase()] || state.cardData[commander.split(' // ')[0].toLowerCase().trim()];
+  if (d?.color_identity) return d.color_identity;
+  if (state.deck?.color_identity) {
+    try { return JSON.parse(state.deck.color_identity); } catch { return []; }
+  }
+  return [];
+}
+
+function attachRefreshHandlers() {
+  const combosRefresh = document.getElementById('combosRefreshBtn');
+  if (combosRefresh) combosRefresh.onclick = () => { state.combosPromise = runCombos(); };
+  const recsRefresh = document.getElementById('recsRefreshBtn');
+  if (recsRefresh) recsRefresh.onclick = () => { state.recsPromise = runRecommendations(); };
 }
 
 function renderBannerSub() {
@@ -831,92 +897,174 @@ Top 5 adds, top 3 cuts. Prioritise untapped dual lands. Flag if user likely owns
   }
 }
 
+async function fetchCombosData(mainCards, commanderName) {
+  const res = await fetch('/api/combos', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ commanders: [{ card: commanderName }], main: mainCards.map(c => ({ card: c })) }),
+  });
+  const data = await res.json();
+  if (data.error || data.commanders || data.main) {
+    throw new Error(data.error || 'Commander Spellbook could not process this list.');
+  }
+  return data.results || {};
+}
+
+function comboGetCards(combo) {
+  return (combo.uses || []).map(u => u.card?.name || '?');
+}
+function comboGetResult(combo) {
+  return (combo.produces || []).map(p => p.feature?.name).filter(Boolean).join(', ') || combo.description?.slice(0, 60) || 'Combo result';
+}
+
+function renderComboCard(combo, missing, ownedNotInDeckLower) {
+  const cards = comboGetCards(combo);
+  const result = comboGetResult(combo);
+  const popularity = combo.popularity || '';
+  const spellbookUrl = `https://commanderspellbook.com/combo/${combo.id}/`;
+  return `<div class="combo-card">
+    <div class="combo-card-row">
+      ${cards.slice(0,4).map(name => {
+        const isMissing = missing.includes(name);
+        const ownsInBulk = isMissing && (state.collection.has(name.toLowerCase()) || (ownedNotInDeckLower && ownedNotInDeckLower.has(name.toLowerCase())));
+        const cardObj = (combo.uses || []).find(u => u.card?.name === name)?.card;
+        const img = cardObj?.imageUriFrontNormal || state.cardData[name.toLowerCase()]?.image_uris?.normal || '';
+        return `<div class="combo-mtg-thumb ${isMissing ? (ownsInBulk ? 'combo-thumb-owned' : 'combo-thumb-missing') : ''}">
+          <div class="combo-thumb-img">${img ? `<img src="${img}" alt="${name}" style="width:100%;height:100%;object-fit:cover;">` : name}</div>
+          <div class="combo-thumb-name">${name.split(',')[0]}${isMissing ? (ownsInBulk ? ' ✓ own' : ' (missing)') : ''}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="margin-top:10px;">
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;">${result.split(',').map(r => `<span class="result-tag">${r.trim()}</span>`).join('')}</div>
+      ${missing.some(m => state.collection.has(m.toLowerCase())) ? `<div class="alert alert-ok" style="margin-bottom:6px;">✓ You own the missing piece in your collection — just not in this deck yet.</div>` : ''}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:0.5px solid var(--bg);">
+        ${popularity ? `<span style="font-size:11px;color:var(--ink3);">In ${popularity} decks</span>` : '<span></span>'}
+        <a style="font-size:11px;color:var(--teal);text-decoration:none;cursor:pointer;" href="${spellbookUrl}" target="_blank">View on Commander Spellbook ↗</a>
+      </div>
+    </div>
+  </div>`;
+}
+
+let comboAccordionState = { oneAway: true, twoAway: false, collection: false };
+
+function toggleComboAccordion(section) {
+  comboAccordionState[section] = !comboAccordionState[section];
+  const panel = document.getElementById(`combo-acc-${section}`);
+  const chevron = document.getElementById(`combo-chev-${section}`);
+  if (panel) panel.style.display = comboAccordionState[section] ? 'block' : 'none';
+  if (chevron) chevron.style.transform = comboAccordionState[section] ? 'rotate(90deg)' : 'rotate(0deg)';
+}
+
 async function runCombos() {
   const body = document.getElementById('combosBody');
   body.innerHTML = '<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Checking Commander Spellbook...</div></div>';
   try {
     const basics = ['swamp','island','mountain','forest','plains'];
     const deckCardsLower = new Set(state.cards.map(c => c.split(' // ')[0].toLowerCase().trim()));
-    const main = [...new Set(state.cards.slice(1).filter(c => !basics.includes(c.toLowerCase())))]
-      .map(c => ({ card: c.split(' // ')[0].trim() }));
     const commanderName = state.cards[0].split(' // ')[0].trim();
-    const res = await fetch('/api/combos', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ commanders: [{ card: commanderName }], main }),
-    });
-    const data = await res.json();
-    if (data.error || data.commanders || data.main) {
-      throw new Error(data.error || 'Commander Spellbook could not process this decklist.');
-    }
-    const results = data.results || {};
+    const deckMain = [...new Set(state.cards.slice(1).filter(c => !basics.includes(c.toLowerCase())).map(c => c.split(' // ')[0].trim()))];
+
+    const results = await fetchCombosData(deckMain, commanderName);
     const included = (results.included || []).slice(0, 12);
-    const almostRaw = (results.almostIncluded || []).slice(0, 20);
+    const almostRaw = (results.almostIncluded || []).slice(0, 30);
 
-    function getCards(combo) {
-      return (combo.uses || []).map(u => u.card?.name || '?');
-    }
     function getMissing(combo) {
-      return getCards(combo).filter(name => !deckCardsLower.has(name.toLowerCase()));
-    }
-    function getResult(combo) {
-      return (combo.produces || []).map(p => p.feature?.name).filter(Boolean).join(', ') || combo.description?.slice(0, 60) || 'Combo result';
+      return comboGetCards(combo).filter(name => !deckCardsLower.has(name.toLowerCase()));
     }
 
-    const oneAway = almostRaw.filter(c => getMissing(c).length === 1);
-    const more = almostRaw.filter(c => getMissing(c).length > 1).slice(0, 5);
+    const oneAway = almostRaw.filter(c => getMissing(c).length === 1).slice(0, 10);
+    const twoAway = almostRaw.filter(c => getMissing(c).length === 2).slice(0, 10);
 
-    function renderCombo(combo, missing = []) {
-      const cards = getCards(combo);
-      const result = getResult(combo);
-      const popularity = combo.popularity || '';
-      const spellbookUrl = `https://commanderspellbook.com/combo/${combo.id}/`;
-      return `<div class="combo-card">
-        <div class="combo-card-row">
-          ${cards.slice(0,4).map(name => {
-            const isMissing = missing.includes(name);
-            const ownsMissing = isMissing && state.collection.has(name.toLowerCase());
-            const cardObj = (combo.uses || []).find(u => u.card?.name === name)?.card;
-            const img = cardObj?.imageUriFrontNormal || state.cardData[name.toLowerCase()]?.image_uris?.normal || '';
-            return `<div class="combo-mtg-thumb ${isMissing ? (ownsMissing ? 'combo-thumb-owned' : 'combo-thumb-missing') : ''}">
-              <div class="combo-thumb-img">${img ? `<img src="${img}" alt="${name}" style="width:100%;height:100%;object-fit:cover;">` : name}</div>
-              <div class="combo-thumb-name">${name.split(',')[0]}${isMissing ? (ownsMissing ? ' ✓' : ' (missing)') : ''}</div>
-            </div>`;
-          }).join('')}
-        </div>
-        <div style="margin-top:10px;">
-          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;">${result.split(',').map(r => `<span class="result-tag">${r.trim()}</span>`).join('')}</div>
-          ${missing.some(m => state.collection.has(m.toLowerCase())) ? `<div class="alert alert-ok" style="margin-bottom:6px;">✓ You own the missing piece — add it to complete this combo.</div>` : ''}
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:0.5px solid var(--bg);">
-            ${popularity ? `<span style="font-size:11px;color:var(--ink3);">In ${popularity} decks</span>` : '<span></span>'}
-            <a style="font-size:11px;color:var(--teal);text-decoration:none;cursor:pointer;" href="${spellbookUrl}" target="_blank">View on Commander Spellbook ↗</a>
-          </div>
-        </div>
-      </div>`;
+    // Combos achievable using cards from the collection but not currently in this deck.
+    // Filtered by colour identity (not an arbitrary cap) so we consider the FULL collection,
+    // not just a slice of it — anything outside the commander's colours can't be cast anyway.
+    let fromCollection = [];
+    const ownedNotInDeckRaw = [...new Set(state.collectionRaw.map(c => c.name).filter(n => n && !basics.includes(n.toLowerCase())))]
+      .filter(n => !deckCardsLower.has(n.split(' // ')[0].toLowerCase().trim()));
+    const commanderColors = getCommanderColorIdentity();
+    let ownedNotInDeck = ownedNotInDeckRaw;
+    if (ownedNotInDeckRaw.length > 0) {
+      const combosLoadingEl = document.getElementById('combosBody');
+      if (combosLoadingEl) combosLoadingEl.innerHTML = `<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Analysing your collection (${ownedNotInDeckRaw.length.toLocaleString()} cards)...</div></div>`;
+      const colorData = await TM.getColorIdentities(ownedNotInDeckRaw);
+      ownedNotInDeck = TM.filterByColorIdentity(ownedNotInDeckRaw, commanderColors, colorData);
+    }
+    const ownedNotInDeckLower = new Set(ownedNotInDeck.map(n => n.toLowerCase()));
+
+    if (ownedNotInDeck.length > 0) {
+      try {
+        const expandedResults = await fetchCombosData([...deckMain, ...ownedNotInDeck], commanderName);
+        const includedIds = new Set(included.map(c => c.id));
+        fromCollection = (expandedResults.included || [])
+          .filter(c => !includedIds.has(c.id))
+          .slice(0, 10);
+      } catch (e) {
+        console.warn('Collection combo search failed', e);
+      }
     }
 
     let html = '';
     if (included.length > 0) {
-      html += `<div class="combo-section-header"><span class="combo-status cs-complete">Complete</span><span style="font-size:12px;color:var(--ink3);">${included.length} combo${included.length !== 1 ? 's' : ''} in this deck</span></div>`;
-      html += included.map(c => renderCombo(c)).join('');
+      html += `<div class="combo-section-header"><span class="combo-status cs-complete">Complete</span><span style="font-size:12px;color:var(--ink3);">${included.length} combo${included.length !== 1 ? 's' : ''} already in this deck</span></div>`;
+      html += included.map(c => renderComboCard(c, [], ownedNotInDeckLower)).join('');
     }
-    if (oneAway.length > 0) {
-      html += `<div class="combo-section-header" style="margin-top:20px;"><span class="combo-status cs-one">One card away</span><span style="font-size:12px;color:var(--ink3);">${oneAway.length} combo${oneAway.length !== 1 ? 's' : ''} within reach</span></div>`;
-      html += oneAway.slice(0, 8).map(c => renderCombo(c, getMissing(c))).join('');
+
+    html += `<div style="margin-top:24px;border-top:0.5px solid var(--border);padding-top:16px;">
+      <div class="accordion-header" onclick="toggleComboAccordion('oneAway')">
+        <span id="combo-chev-oneAway" class="accordion-chevron" style="transform:rotate(90deg);">›</span>
+        <span class="combo-status cs-one">One card away</span>
+        <span style="font-size:12px;color:var(--ink3);">${oneAway.length} combo${oneAway.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div id="combo-acc-oneAway" class="accordion-panel">
+        ${oneAway.length > 0 ? oneAway.map(c => renderComboCard(c, getMissing(c), ownedNotInDeckLower)).join('') : '<div style="font-size:12px;color:var(--ink3);padding:8px 0;">None found.</div>'}
+      </div>
+
+      <div class="accordion-header" onclick="toggleComboAccordion('twoAway')">
+        <span id="combo-chev-twoAway" class="accordion-chevron">›</span>
+        <span class="combo-status cs-one" style="background:rgba(245,166,35,0.08);">Two cards away</span>
+        <span style="font-size:12px;color:var(--ink3);">${twoAway.length} combo${twoAway.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div id="combo-acc-twoAway" class="accordion-panel" style="display:none;">
+        ${twoAway.length > 0 ? twoAway.map(c => renderComboCard(c, getMissing(c), ownedNotInDeckLower)).join('') : '<div style="font-size:12px;color:var(--ink3);padding:8px 0;">None found.</div>'}
+      </div>
+
+      <div class="accordion-header" onclick="toggleComboAccordion('collection')">
+        <span id="combo-chev-collection" class="accordion-chevron">›</span>
+        <span class="combo-status cs-complete" style="background:rgba(0,212,204,0.08);">From your collection</span>
+        <span style="font-size:12px;color:var(--ink3);">${fromCollection.length} combo${fromCollection.length !== 1 ? 's' : ''} achievable using cards you own</span>
+      </div>
+      <div id="combo-acc-collection" class="accordion-panel" style="display:none;">
+        ${fromCollection.length > 0
+          ? fromCollection.map(c => renderComboCard(c, comboGetCards(c).filter(n => !deckCardsLower.has(n.toLowerCase())), ownedNotInDeckLower)).join('')
+          : '<div style="font-size:12px;color:var(--ink3);padding:8px 0;">No additional combos found using cards in your collection.</div>'}
+      </div>
+    </div>`;
+
+    if (included.length === 0 && oneAway.length === 0 && twoAway.length === 0 && fromCollection.length === 0) {
+      html = '<div class="empty-state"><div class="empty-title">No combos found</div><div class="empty-sub">This deck has no known combo lines in Commander Spellbook.</div></div>';
     }
-    if (more.length > 0) {
-      html += `<div class="combo-section-header" style="margin-top:20px;"><span class="combo-status cs-more">Worth knowing about</span><span style="font-size:12px;color:var(--ink3);">${more.length} partial combo${more.length !== 1 ? 's' : ''}</span></div>`;
-      html += more.map(c => renderCombo(c, getMissing(c))).join('');
-    }
-    if (!html) html = '<div class="empty-state"><div class="empty-title">No combos found</div><div class="empty-sub">This deck has no known combo lines in Commander Spellbook.</div></div>';
-    body.innerHTML = `<div style="padding:20px 24px;">${html}</div>`;
+
+    body.innerHTML = `<div style="padding:20px 24px;">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:4px;"><a id="combosRefreshBtn" class="stat-link" style="cursor:pointer;">↻ Refresh</a></div>
+      ${html}
+    </div>`;
+    attachRefreshHandlers();
+
     state.combosSummary = {
-      complete: included.map(c => `${getCards(c).join(' + ')} → ${getResult(c)}`),
-      oneAway: oneAway.slice(0, 8).map(c => {
+      complete: included.map(c => `${comboGetCards(c).join(' + ')} → ${comboGetResult(c)}`),
+      oneAway: oneAway.map(c => {
         const missing = getMissing(c);
-        const ownsMissing = missing.some(m => state.collection.has(m.toLowerCase()));
-        return `${getCards(c).join(' + ')} → ${getResult(c)} (missing: ${missing.join(', ')}${ownsMissing ? ' — YOU OWN THIS' : ''})`;
+        const owns = missing.some(m => state.collection.has(m.toLowerCase()));
+        return `${comboGetCards(c).join(' + ')} → ${comboGetResult(c)} (missing: ${missing.join(', ')}${owns ? ' — YOU OWN THIS, just add it' : ' — not owned'})`;
       }),
+      twoAway: twoAway.map(c => {
+        const missing = getMissing(c);
+        const ownedCount = missing.filter(m => state.collection.has(m.toLowerCase())).length;
+        return `${comboGetCards(c).join(' + ')} → ${comboGetResult(c)} (missing: ${missing.join(', ')}, ${ownedCount}/${missing.length} already owned)`;
+      }),
+      fromCollection: fromCollection.map(c => `${comboGetCards(c).join(' + ')} → ${comboGetResult(c)} (achievable by adding cards you already own from your collection)`),
     };
+    setDeckCache({ combosHtml: body.innerHTML, combosSummary: state.combosSummary });
   } catch (e) {
     body.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load combos</div><div class="empty-sub">${e.message}</div></div>`;
   }
@@ -935,21 +1083,43 @@ async function runRecommendations() {
       if (recRes.ok) { const d = await recRes.json(); recs = (d.data?.recommendations || []).slice(0, 20); }
     } catch (e) { console.warn('Recommander unavailable, using AI only', e); }
     const recSuggestions = recs.length > 0 ? `\nRecommander community suggestions: ${recs.map(r => r.name).join(', ')}` : '\nNo community data available — use your MTG knowledge to suggest strong cards.';
+
+    const basicsForRecs = ['swamp','island','mountain','forest','plains'];
+    const deckCardsLowerForRecs = new Set(state.cards.map(c => c.split(' // ')[0].toLowerCase().trim()));
+    const ownedNotInDeckRawForRecs = [...new Set(state.collectionRaw.map(c => c.name).filter(n => n && !basicsForRecs.includes(n.toLowerCase())))]
+      .filter(n => !deckCardsLowerForRecs.has(n.split(' // ')[0].toLowerCase().trim()));
+    // Filter by colour identity rather than an arbitrary cap — considers the FULL collection,
+    // since anything outside the commander's colours couldn't be played anyway.
+    let ownedNotInDeckAll = ownedNotInDeckRawForRecs;
+    if (ownedNotInDeckRawForRecs.length > 0) {
+      const recsLoadingEl = document.getElementById('recsContent');
+      if (recsLoadingEl) recsLoadingEl.innerHTML = `<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Analysing your collection (${ownedNotInDeckRawForRecs.length.toLocaleString()} cards)...</div></div>`;
+      const colorData = await TM.getColorIdentities(ownedNotInDeckRawForRecs);
+      ownedNotInDeckAll = TM.filterByColorIdentity(ownedNotInDeckRawForRecs, getCommanderColorIdentity(), colorData);
+    }
+    const ownedListBlock = ownedNotInDeckAll.length > 0
+      ? `\nOWNED CARDS LIST (every card the user owns, in the correct colour identity, that is not already in this deck — for the "collection" section ONLY pick from this exact list, do not pick anything outside it):\n${ownedNotInDeckAll.join(', ')}`
+      : '\nNo collection data available — skip the "collection" section (return an empty array for it).';
+
     const prompt = `Commander deck: "${state.cards[0].split(' // ')[0]}"
 Win condition: ${state.wincon || 'discard/value/ping with Syr Konrad'}
 Theme: ${state.theme || 'none'}
 Power level: ${state.powerLevel}/5
 Current deck (first 30): ${state.cards.slice(0, 30).join(', ')}
 ${recSuggestions}
+${ownedListBlock}
 
-Based on this deck's strategy, pick the top 10 best card upgrades not already in the deck. Then pick up to 8 themed alternatives${state.theme ? ` for theme: ${state.theme}` : ''}.
+Based on this deck's strategy, do three things:
+1. Pick the top 10 best card upgrades not already in the deck (from anywhere, regardless of ownership).
+2. Pick up to 8 themed alternatives${state.theme ? ` for theme: ${state.theme}` : ''}.
+3. From the OWNED CARDS LIST only, pick up to 8 cards that would genuinely improve this deck.
 Prioritise cards that support the win condition.
-CRITICAL: Only suggest cards that are REAL, printed Magic: The Gathering cards. Do not invent card names, even ones that sound plausible for the theme. If you are not certain a card exists exactly as named, do not include it.
+CRITICAL: Only suggest cards that are REAL, printed Magic: The Gathering cards. Do not invent card names, even ones that sound plausible for the theme. For the "collection" section, only pick names that appear verbatim in the OWNED CARDS LIST.
 Return JSON only, no markdown:
-{"best":[{"name":"Card","reason":"one sentence why it fits","cmc":"2","type":"Creature"}],"themed":[{"name":"Card","reason":"one sentence","trade_off":"brief note on power vs theme trade-off"}]}`;
+{"best":[{"name":"Card","reason":"one sentence why it fits","cmc":"2","type":"Creature"}],"themed":[{"name":"Card","reason":"one sentence","trade_off":"brief note on power vs theme trade-off"}],"collection":[{"name":"Card","reason":"one sentence why it fits, picked from OWNED CARDS LIST only"}]}`;
     const aiRes = await fetch('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2500,
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 3000,
         system: 'You are an MTG deck advisor with deep, accurate knowledge of real printed Magic: The Gathering cards. You never invent or hallucinate card names. Return only valid JSON, no markdown.',
         messages: [{ role: 'user', content: prompt }] }),
     });
@@ -959,7 +1129,7 @@ Return JSON only, no markdown:
 
     // Validate every recommended card against Scryfall before showing anything.
     // This is the safeguard against the AI inventing plausible-sounding fake cards.
-    const allRecNames = [...(parsed.best || []), ...(parsed.themed || [])].map(r => r.name);
+    const allRecNames = [...(parsed.best || []), ...(parsed.themed || []), ...(parsed.collection || [])].map(r => r.name);
     let verifiedData = {};
     if (allRecNames.length > 0) {
       verifiedData = await TM.fetchScryfallBulk(allRecNames);
@@ -968,12 +1138,15 @@ Return JSON only, no markdown:
     function isVerified(name) {
       return !!(verifiedData[name.toLowerCase()] || verifiedData[name.split(' // ')[0].toLowerCase().trim()]);
     }
+    const ownedNotInDeckLowerSet = new Set(ownedNotInDeckAll.map(n => n.toLowerCase()));
     const verifiedBest = (parsed.best || []).filter(r => isVerified(r.name));
     const verifiedThemed = (parsed.themed || []).filter(r => isVerified(r.name));
-    const droppedCount = allRecNames.length - verifiedBest.length - verifiedThemed.length;
+    // Double safety: collection picks must both be verified real cards AND actually appear in the owned list.
+    const verifiedCollection = (parsed.collection || []).filter(r => isVerified(r.name) && ownedNotInDeckLowerSet.has(r.name.toLowerCase()));
+    const droppedCount = allRecNames.length - verifiedBest.length - verifiedThemed.length - verifiedCollection.length;
 
-    function recCard(r, themed = false) {
-      const owned = state.collection.has(r.name.toLowerCase());
+    function recCard(r, mode) {
+      const owned = mode === 'collection' ? true : state.collection.has(r.name.toLowerCase());
       const d = verifiedData[r.name.toLowerCase()] || verifiedData[r.name.split(' // ')[0].toLowerCase().trim()];
       const img = d?.image_uris?.normal || d?.image_uris?.small || '';
       return `<div class="rec-card" onclick="openCardModal('${r.name.replace(/'/g,"\'")}')" style="cursor:pointer;">
@@ -981,7 +1154,7 @@ Return JSON only, no markdown:
         <div style="flex:1;">
           <div style="font-size:13px;font-weight:600;color:var(--black);margin-bottom:3px;">${r.name}</div>
           <div style="font-size:11px;color:var(--ink3);line-height:1.4;margin-bottom:5px;">${r.reason}</div>
-          ${themed && r.trade_off ? `<div style="font-size:10px;color:var(--ink4);font-style:italic;margin-bottom:4px;">${r.trade_off}</div>` : ''}
+          ${mode === 'themed' && r.trade_off ? `<div style="font-size:10px;color:var(--ink4);font-style:italic;margin-bottom:4px;">${r.trade_off}</div>` : ''}
           <div style="display:flex;gap:5px;flex-wrap:wrap;">
             <span class="${owned ? 'badge badge-own' : 'badge badge-buy'}">${owned ? '✓ Own it' : state.collection.size > 0 ? '✗ Need to buy' : 'Collection?'}</span>
             ${r.cmc && r.cmc !== '?' ? `<span class="badge badge-neutral">CMC ${r.cmc}</span>` : ''}
@@ -991,24 +1164,34 @@ Return JSON only, no markdown:
     }
     container.innerHTML = `
       <div style="padding:20px 24px;">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><a id="recsRefreshBtn" class="stat-link" style="cursor:pointer;">↻ Refresh</a></div>
         ${droppedCount > 0 ? `<div class="alert alert-warn" style="margin-bottom:14px;">Filtered out ${droppedCount} suggestion${droppedCount !== 1 ? 's' : ''} that couldn't be verified as real cards.</div>` : ''}
         <div class="rec-layout">
           <div>
             <div class="rec-col-header">Best cards <span class="badge badge-bracket" style="font-size:10px;">Performance</span></div>
-            ${verifiedBest.map(r => recCard(r, false)).join('') || '<div style="color:var(--ink3);font-size:13px;">No verified recommendations found.</div>'}
+            ${verifiedBest.map(r => recCard(r, 'best')).join('') || '<div style="color:var(--ink3);font-size:13px;">No verified recommendations found.</div>'}
+          </div>
+          <div>
+            <div class="rec-col-header">From your collection <span class="badge badge-own" style="font-size:10px;">Owned</span></div>
+            ${verifiedCollection.length > 0
+              ? verifiedCollection.map(r => recCard(r, 'collection')).join('')
+              : `<div style="color:var(--ink3);font-size:13px;line-height:1.5;">${ownedNotInDeckAll.length > 0 ? 'No strong additions found in your collection right now.' : 'Upload your collection to see cards you already own that would improve this deck.'}</div>`}
           </div>
           <div>
             <div class="rec-col-header">Themed alternatives <span class="badge badge-teal" style="font-size:10px;">Flavour</span></div>
             ${verifiedThemed.length > 0
-              ? verifiedThemed.map(r => recCard(r, true)).join('')
+              ? verifiedThemed.map(r => recCard(r, 'themed')).join('')
               : `<div style="color:var(--ink3);font-size:13px;line-height:1.5;">${state.theme ? 'No verified themed alternatives found. Try asking Urza for specific suggestions.' : 'Set a theme in your deck to see themed alternatives here.'}</div>`}
           </div>
         </div>
       </div>`;
+    attachRefreshHandlers();
     state.recsSummary = {
       best: verifiedBest.map(r => `${r.name} (${state.collection.has(r.name.toLowerCase()) ? 'owned' : 'need to buy'}): ${r.reason}`),
       themed: verifiedThemed.map(r => `${r.name} (${state.collection.has(r.name.toLowerCase()) ? 'owned' : 'need to buy'}): ${r.reason}${r.trade_off ? ' — trade-off: ' + r.trade_off : ''}`),
+      collection: verifiedCollection.map(r => `${r.name} (already owned, sitting in bulk): ${r.reason}`),
     };
+    setDeckCache({ recsHtml: container.innerHTML, recsSummary: state.recsSummary });
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load recommendations</div><div class="empty-sub">${e.message}</div></div>`;
   }
@@ -1072,11 +1255,11 @@ TONE: Direct, smart, slightly casual. Australian English. No corporate language.
 function buildContext() {
   const cardContext = Object.values(state.cardData).slice(0, 60).map(c => `${c.name} [${c.mana_cost || '0'}] ${c.type_line}: ${(c.oracle_text || '').slice(0, 100)}`).join('\n');
   const recsContext = state.recsSummary
-    ? `\nRECOMMENDATIONS TAB CONTEXT (what the user currently sees):\nBest cards:\n${(state.recsSummary.best || []).map(r => '- ' + r).join('\n')}\nThemed alternatives:\n${(state.recsSummary.themed || []).map(r => '- ' + r).join('\n')}`
-    : '\nRECOMMENDATIONS TAB CONTEXT: Not loaded yet.';
+    ? `\nRECOMMENDATIONS TAB CONTEXT (what the user currently sees):\nBest cards (performance):\n${(state.recsSummary.best || []).map(r => '- ' + r).join('\n') || '- None'}\nFrom your collection (already owned, sitting in bulk):\n${(state.recsSummary.collection || []).map(r => '- ' + r).join('\n') || '- None found'}\nThemed alternatives:\n${(state.recsSummary.themed || []).map(r => '- ' + r).join('\n') || '- None'}`
+    : '\nRECOMMENDATIONS TAB CONTEXT: Not loaded yet — tell the user to check the Recommendations tab.';
   const combosContext = state.combosSummary
-    ? `\nCOMBOS TAB CONTEXT (what the user currently sees):\nComplete combos already in the deck:\n${(state.combosSummary.complete || []).map(c => '- ' + c).join('\n') || '- None'}\nOne card away combos:\n${(state.combosSummary.oneAway || []).map(c => '- ' + c).join('\n') || '- None'}`
-    : '\nCOMBOS TAB CONTEXT: Not loaded yet.';
+    ? `\nCOMBOS TAB CONTEXT (what the user currently sees):\nComplete combos already achieved in the deck:\n${(state.combosSummary.complete || []).map(c => '- ' + c).join('\n') || '- None'}\nOne card away combos:\n${(state.combosSummary.oneAway || []).map(c => '- ' + c).join('\n') || '- None'}\nTwo cards away combos:\n${(state.combosSummary.twoAway || []).map(c => '- ' + c).join('\n') || '- None'}\nCombos achievable using cards from the collection (not currently in deck):\n${(state.combosSummary.fromCollection || []).map(c => '- ' + c).join('\n') || '- None found'}`
+    : '\nCOMBOS TAB CONTEXT: Not loaded yet — tell the user to check the Combos tab.';
   return `${SYSTEM_PROMPT}
 
 DECK CONTEXT:
@@ -1140,11 +1323,15 @@ async function sendChat() {
   input.value = '';
   input.style.height = 'auto';
   addChatMsg('user', text);
-  const context = buildContext();
-  state.chatHistory.push({ role: 'user', content: text });
   const typingId = addChatTyping();
   document.querySelector('.chat-input-row .btn').disabled = true;
   try {
+    // Make sure Recommendations/Combos data has actually finished loading before
+    // Urza answers — otherwise a question asked right after page load could get
+    // a stale "not loaded yet" answer even though the tab is about to populate.
+    await Promise.all([state.recsPromise, state.combosPromise].filter(Boolean)).catch(() => {});
+    const context = buildContext();
+    state.chatHistory.push({ role: 'user', content: text });
     const res = await fetch('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1200, system: context, messages: state.chatHistory }),
