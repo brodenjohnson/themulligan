@@ -149,7 +149,7 @@ async function saveCollection(cards) {
   if (!session) return;
   // cards can be array of strings (legacy) or array of {name, quantity, set, listedIn}
   const normalized = cards.map(c => typeof c === 'string' ? { name: c, quantity: 1, set: '', listedIn: 'Bulk' } : c);
-  await sbFetch('/rest/v1/collections', {
+  await sbFetch('/rest/v1/collections?on_conflict=user_id', {
     method: 'POST',
     headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ user_id: session.user.id, cards: normalized, updated_at: new Date().toISOString() }),
