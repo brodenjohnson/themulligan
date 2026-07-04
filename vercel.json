@@ -8,7 +8,11 @@
   "functions": {
     "api/chat.js": {
       "memory": 512,
-      "maxDuration": 30
+      "maxDuration": 60
+    },
+    "api/combos.js": {
+      "memory": 512,
+      "maxDuration": 60
     }
   }
 }
