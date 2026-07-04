@@ -507,33 +507,48 @@ function handleFile(event) {
 async function saveUpload() {
   const text = document.getElementById('collPaste').value.trim();
   if (!text) return;
-  const cards = TM.parseCollection(text);
   const statusEl = document.getElementById('uploadStatus');
-  statusEl.style.color = 'var(--ink3)';
-  statusEl.textContent = 'Validating with Scryfall...';
   const btn = document.getElementById('uploadSaveBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>';
-  const validation = await TM.validateCollection(cards.map(c => c.name));
-  if (!validation.ok) {
-    statusEl.style.color = 'var(--pink)';
-    statusEl.textContent = validation.error;
+  try {
+    const cards = TM.parseCollection(text);
+    if (cards.length === 0) {
+      statusEl.style.color = 'var(--pink)';
+      statusEl.textContent = 'No cards detected. Check the file format — expected a CSV with a Name column, or one card per line.';
+      return;
+    }
+    statusEl.style.color = 'var(--ink3)';
+    statusEl.textContent = `Validating ${cards.length.toLocaleString()} cards with Scryfall...`;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    const validation = await TM.validateCollection(cards.map(c => c.name));
+    if (!validation.ok) {
+      statusEl.style.color = 'var(--pink)';
+      statusEl.style.whiteSpace = 'pre-line';
+      statusEl.textContent = validation.error;
+      btn.disabled = false;
+      btn.textContent = 'Save collection';
+      return;
+    }
+    statusEl.style.color = 'var(--ink3)';
+    statusEl.textContent = `Saving ${cards.length.toLocaleString()} cards...`;
+    await TM.saveCollection(cards);
+    statusEl.style.color = 'var(--teal)';
+    const unique = new Set(cards.map(c => c.name.toLowerCase())).size;
+    statusEl.textContent = `✓ ${cards.length.toLocaleString()} cards saved (${unique.toLocaleString()} unique)`;
     btn.disabled = false;
     btn.textContent = 'Save collection';
-    return;
+    setTimeout(() => {
+      closeUploadModal();
+      window.location.reload();
+    }, 1200);
+  } catch (e) {
+    console.error(e);
+    statusEl.style.color = 'var(--pink)';
+    statusEl.style.whiteSpace = 'pre-line';
+    statusEl.textContent = 'Save failed: ' + ((e && e.message) || String(e));
+    btn.disabled = false;
+    btn.textContent = 'Save collection';
   }
-  statusEl.style.color = 'var(--ink3)';
-  statusEl.textContent = 'Saving...';
-  await TM.saveCollection(cards);
-  statusEl.style.color = 'var(--teal)';
-  const unique = new Set(cards.map(c => c.name.toLowerCase())).size;
-  statusEl.textContent = `✓ ${cards.length} cards saved (${unique} unique)`;
-  btn.disabled = false;
-  btn.textContent = 'Save collection';
-  setTimeout(() => {
-    closeUploadModal();
-    window.location.reload();
-  }, 1200);
 }
 
 document.addEventListener('click', e => {
