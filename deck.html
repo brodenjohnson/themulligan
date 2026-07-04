@@ -754,38 +754,47 @@ async function runCombos() {
   body.innerHTML = '<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Checking Commander Spellbook...</div></div>';
   try {
     const basics = ['swamp','island','mountain','forest','plains'];
-    const main = [...new Set(state.cards.slice(1).filter(c => !basics.includes(c.toLowerCase())))];
-    const res = await fetch('https://backend.commanderspellbook.com/find-my-combos/', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ commanders: [state.cards[0]], main }),
+    const deckCardsLower = new Set(state.cards.map(c => c.split(' // ')[0].toLowerCase().trim()));
+    const main = [...new Set(state.cards.slice(1).filter(c => !basics.includes(c.toLowerCase())))]
+      .map(c => ({ card: c.split(' // ')[0].trim() }));
+    const commanderName = state.cards[0].split(' // ')[0].trim();
+    const res = await fetch('/api/combos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commanders: [{ card: commanderName }], main }),
     });
-    if (!res.ok) throw new Error('API error');
     const data = await res.json();
-    const included = (data.results?.included || data.included || []).slice(0, 12);
-    const almost = data.results?.almost_included || data.almost_included || [];
-    const oneAway = almost.filter(c => (c.missingCards || c.missing_cards || []).length === 1).slice(0, 8);
-    const more = almost.filter(c => (c.missingCards || c.missing_cards || []).length > 1).slice(0, 5);
+    if (data.error || data.commanders || data.main) {
+      throw new Error(data.error || 'Commander Spellbook could not process this decklist.');
+    }
+    const results = data.results || {};
+    const included = (results.included || []).slice(0, 12);
+    const almostRaw = (results.almostIncluded || []).slice(0, 20);
 
     function getCards(combo) {
-      return (combo.uses || combo.cards || []).map(u => u.card?.name || u.name || '?');
-    }
-    function getResult(combo) {
-      return (combo.produces || []).map(p => p.feature?.name || p.name || p).join(', ') || combo.result || 'Combo result';
+      return (combo.uses || []).map(u => u.card?.name || '?');
     }
     function getMissing(combo) {
-      return (combo.missingCards || combo.missing_cards || []).map(c => c.card?.name || c.name || c);
+      return getCards(combo).filter(name => !deckCardsLower.has(name.toLowerCase()));
     }
+    function getResult(combo) {
+      return (combo.produces || []).map(p => p.feature?.name).filter(Boolean).join(', ') || combo.description?.slice(0, 60) || 'Combo result';
+    }
+
+    const oneAway = almostRaw.filter(c => getMissing(c).length === 1);
+    const more = almostRaw.filter(c => getMissing(c).length > 1).slice(0, 5);
+
     function renderCombo(combo, missing = []) {
       const cards = getCards(combo);
       const result = getResult(combo);
-      const inDecks = combo.popularity || '';
+      const popularity = combo.popularity || '';
+      const spellbookUrl = `https://commanderspellbook.com/combo/${combo.id}/`;
       return `<div class="combo-card">
         <div class="combo-card-row">
           ${cards.slice(0,4).map(name => {
             const isMissing = missing.includes(name);
             const ownsMissing = isMissing && state.collection.has(name.toLowerCase());
-            const d = state.cardData[name.toLowerCase()];
-            const img = d?.image_uris?.normal || '';
+            const cardObj = (combo.uses || []).find(u => u.card?.name === name)?.card;
+            const img = cardObj?.imageUriFrontNormal || state.cardData[name.toLowerCase()]?.image_uris?.normal || '';
             return `<div class="combo-mtg-thumb ${isMissing ? (ownsMissing ? 'combo-thumb-owned' : 'combo-thumb-missing') : ''}">
               <div class="combo-thumb-img">${img ? `<img src="${img}" alt="${name}" style="width:100%;height:100%;object-fit:cover;">` : name}</div>
               <div class="combo-thumb-name">${name.split(',')[0]}${isMissing ? (ownsMissing ? ' ✓' : ' (missing)') : ''}</div>
@@ -796,8 +805,8 @@ async function runCombos() {
           <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;">${result.split(',').map(r => `<span class="result-tag">${r.trim()}</span>`).join('')}</div>
           ${missing.some(m => state.collection.has(m.toLowerCase())) ? `<div class="alert alert-ok" style="margin-bottom:6px;">✓ You own the missing piece — add it to complete this combo.</div>` : ''}
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:0.5px solid var(--bg);">
-            ${inDecks ? `<span style="font-size:11px;color:var(--ink3);">In ${inDecks} decks</span>` : '<span></span>'}
-            <a style="font-size:11px;color:var(--teal);text-decoration:none;cursor:pointer;" href="https://commanderspellbook.com" target="_blank">View on Commander Spellbook ↗</a>
+            ${popularity ? `<span style="font-size:11px;color:var(--ink3);">In ${popularity} decks</span>` : '<span></span>'}
+            <a style="font-size:11px;color:var(--teal);text-decoration:none;cursor:pointer;" href="${spellbookUrl}" target="_blank">View on Commander Spellbook ↗</a>
           </div>
         </div>
       </div>`;
@@ -810,7 +819,7 @@ async function runCombos() {
     }
     if (oneAway.length > 0) {
       html += `<div class="combo-section-header" style="margin-top:20px;"><span class="combo-status cs-one">One card away</span><span style="font-size:12px;color:var(--ink3);">${oneAway.length} combo${oneAway.length !== 1 ? 's' : ''} within reach</span></div>`;
-      html += oneAway.map(c => renderCombo(c, getMissing(c))).join('');
+      html += oneAway.slice(0, 8).map(c => renderCombo(c, getMissing(c))).join('');
     }
     if (more.length > 0) {
       html += `<div class="combo-section-header" style="margin-top:20px;"><span class="combo-status cs-more">Worth knowing about</span><span style="font-size:12px;color:var(--ink3);">${more.length} partial combo${more.length !== 1 ? 's' : ''}</span></div>`;
