@@ -326,6 +326,7 @@ let state = {
   deck: null, cards: [], cardData: {}, collection: new Set(),
   chatHistory: [], currentView: 'grid', deckAnalysed: false,
   wincon: '', theme: '', powerLevel: 3,
+  recsSummary: null, combosSummary: null,
 };
 
 async function init() {
@@ -356,7 +357,11 @@ async function init() {
     renderManaBase();
     runCombos();
     runRecommendations();
-    startChat();
+    if (Array.isArray(deck.chat_history) && deck.chat_history.length > 0) {
+      loadChatHistory(deck.chat_history);
+    } else {
+      startChat();
+    }
   } catch (e) {
     console.error(e);
     const errBody = document.getElementById('cardsBody');
@@ -564,6 +569,18 @@ function groupCards(cards, groupBy, sortBy) {
 
 function openCardModal(name) {
   const d = state.cardData[name.toLowerCase()] || state.cardData[name.split(' // ')[0].toLowerCase().trim()];
+  renderCardModalContent(name, d);
+  document.getElementById('cardModal').classList.add('open');
+  if (!d) {
+    TM.fetchScryfallBulk([name]).then(data => {
+      Object.assign(state.cardData, data);
+      const fresh = data[name.toLowerCase()] || data[name.split(' // ')[0].toLowerCase().trim()];
+      if (fresh) renderCardModalContent(name, fresh);
+    }).catch(() => {});
+  }
+}
+
+function renderCardModalContent(name, d) {
   document.getElementById('cmName').textContent = d?.name || name;
   document.getElementById('cmCost').textContent = d?.mana_cost ? `Mana cost: ${d.mana_cost}` : '';
   document.getElementById('cmType').textContent = d?.type_line || '';
@@ -574,8 +591,7 @@ function openCardModal(name) {
   const img = document.getElementById('cmImg');
   const fallback = document.getElementById('cmImgFallback');
   if (imgUrl) { img.src = imgUrl; img.style.display = 'block'; fallback.style.display = 'none'; }
-  else { img.style.display = 'none'; fallback.style.display = 'flex'; fallback.textContent = name; }
-  document.getElementById('cardModal').classList.add('open');
+  else { img.style.display = 'none'; fallback.style.display = 'flex'; fallback.textContent = d ? '' : 'Loading...'; }
 }
 
 function closeCardModal() { document.getElementById('cardModal').classList.remove('open'); }
@@ -893,6 +909,14 @@ async function runCombos() {
     }
     if (!html) html = '<div class="empty-state"><div class="empty-title">No combos found</div><div class="empty-sub">This deck has no known combo lines in Commander Spellbook.</div></div>';
     body.innerHTML = `<div style="padding:20px 24px;">${html}</div>`;
+    state.combosSummary = {
+      complete: included.map(c => `${getCards(c).join(' + ')} → ${getResult(c)}`),
+      oneAway: oneAway.slice(0, 8).map(c => {
+        const missing = getMissing(c);
+        const ownsMissing = missing.some(m => state.collection.has(m.toLowerCase()));
+        return `${getCards(c).join(' + ')} → ${getResult(c)} (missing: ${missing.join(', ')}${ownsMissing ? ' — YOU OWN THIS' : ''})`;
+      }),
+    };
   } catch (e) {
     body.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load combos</div><div class="empty-sub">${e.message}</div></div>`;
   }
@@ -981,6 +1005,10 @@ Return JSON only, no markdown:
           </div>
         </div>
       </div>`;
+    state.recsSummary = {
+      best: verifiedBest.map(r => `${r.name} (${state.collection.has(r.name.toLowerCase()) ? 'owned' : 'need to buy'}): ${r.reason}`),
+      themed: verifiedThemed.map(r => `${r.name} (${state.collection.has(r.name.toLowerCase()) ? 'owned' : 'need to buy'}): ${r.reason}${r.trade_off ? ' — trade-off: ' + r.trade_off : ''}`),
+    };
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load recommendations</div><div class="empty-sub">${e.message}</div></div>`;
   }
@@ -1026,20 +1054,29 @@ function safeParseAIJson(raw) {
   }
 }
 
-const SYSTEM_PROMPT = `You are Urza, an expert Magic: The Gathering Commander deck advisor inside The Mulligan. You are knowledgeable, direct, and slightly dry in tone. You know this deck thoroughly from the context provided.
+const SYSTEM_PROMPT = `You are Urza, an expert Magic: The Gathering Commander deck advisor inside The Mulligan. You are knowledgeable, direct, and slightly dry in tone. You know this deck thoroughly from the context provided, including what is currently shown on the Recommendations and Combos tabs.
 
 HOW TO RESPOND:
 - Lead with the direct answer, concise and clear
 - When recommending a swap, always say what to cut and why — never just what to add
 - For themed alternatives, show best card vs best themed card side by side
-- For combo lines, explain step by step in plain language
+- For combo lines, reference the ACTUAL combos listed in the COMBOS TAB CONTEXT below — don't invent new ones. If asked "what combo should I go for", pick the best one from that list (prioritise ones where you already own the missing piece) and explain why
+- If asked about recommendations, reference the ACTUAL cards listed in the RECOMMENDATIONS TAB CONTEXT below — don't invent new suggestions unless asked for more
 - For mana base, analyse land count, tapped/untapped ratio, colour sources
 - If collection data is available, flag owned cards with ✓ and unowned with ✗
+- CRITICAL: wrap every specific real MTG card name you mention in **double asterisks**, e.g. **Sol Ring**, so it renders as a clickable card link. Only do this for real, verified card names — never wrap something you're not confident is a real printed card.
+- Never invent or hallucinate card names, even ones that sound plausible for the deck's theme
 
 TONE: Direct, smart, slightly casual. Australian English. No corporate language. No excessive enthusiasm.`;
 
 function buildContext() {
   const cardContext = Object.values(state.cardData).slice(0, 60).map(c => `${c.name} [${c.mana_cost || '0'}] ${c.type_line}: ${(c.oracle_text || '').slice(0, 100)}`).join('\n');
+  const recsContext = state.recsSummary
+    ? `\nRECOMMENDATIONS TAB CONTEXT (what the user currently sees):\nBest cards:\n${(state.recsSummary.best || []).map(r => '- ' + r).join('\n')}\nThemed alternatives:\n${(state.recsSummary.themed || []).map(r => '- ' + r).join('\n')}`
+    : '\nRECOMMENDATIONS TAB CONTEXT: Not loaded yet.';
+  const combosContext = state.combosSummary
+    ? `\nCOMBOS TAB CONTEXT (what the user currently sees):\nComplete combos already in the deck:\n${(state.combosSummary.complete || []).map(c => '- ' + c).join('\n') || '- None'}\nOne card away combos:\n${(state.combosSummary.oneAway || []).map(c => '- ' + c).join('\n') || '- None'}`
+    : '\nCOMBOS TAB CONTEXT: Not loaded yet.';
   return `${SYSTEM_PROMPT}
 
 DECK CONTEXT:
@@ -1049,9 +1086,28 @@ Win condition: ${state.wincon || 'Unknown'}
 Theme: ${state.theme || 'None'}
 Power level: ${state.powerLevel}/5
 Collection loaded: ${state.collection.size > 0 ? 'Yes — ' + state.collection.size + ' cards' : 'No'}
+${recsContext}
+${combosContext}
 
 CARD ORACLE TEXT:
 ${cardContext}`;
+}
+
+function loadChatHistory(history) {
+  state.chatHistory = history;
+  document.getElementById('chatContext').innerHTML = `<strong>Commander:</strong> ${state.cards[0]}<br><strong>Cards:</strong> ${state.cards.length}<br><strong>Win-con:</strong> ${state.wincon || 'Not set'}<br><strong>Theme:</strong> ${state.theme || 'Not set'}`;
+  const container = document.getElementById('chatMessages');
+  container.innerHTML = '';
+  history.forEach(msg => {
+    // The very first user message is our internal intake prompt (includes full deck context) — skip showing it raw.
+    if (msg.role === 'user' && msg.content.includes('DECK CONTEXT:')) return;
+    addChatMsg(msg.role, msg.content, false);
+  });
+}
+
+function persistChatHistory() {
+  if (!deckId) return;
+  TM.saveDeck({ id: deckId, chat_history: state.chatHistory }).catch(e => console.warn('Failed to save chat history', e));
 }
 
 async function startChat() {
@@ -1070,6 +1126,7 @@ async function startChat() {
     const reply = data.content?.[0]?.text || 'Something went wrong.';
     addChatMsg('assistant', reply);
     state.chatHistory.push({ role: 'assistant', content: reply });
+    persistChatHistory();
   } catch (e) {
     removeChatTyping(typingId);
     addChatMsg('assistant', `Couldn't connect to the API. Error: ${e.message}`);
@@ -1090,13 +1147,14 @@ async function sendChat() {
   try {
     const res = await fetch('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system: context, messages: state.chatHistory }),
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1200, system: context, messages: state.chatHistory }),
     });
     removeChatTyping(typingId);
     const data = await res.json();
     const reply = data.content?.[0]?.text || 'Something went wrong.';
     addChatMsg('assistant', reply);
     state.chatHistory.push({ role: 'assistant', content: reply });
+    persistChatHistory();
   } catch (e) {
     removeChatTyping(typingId);
     addChatMsg('assistant', `Error: ${e.message}`);
@@ -1110,7 +1168,7 @@ function quickChat(text) {
   sendChat();
 }
 
-function addChatMsg(role, text) {
+function addChatMsg(role, text, scroll = true) {
   const container = document.getElementById('chatMessages');
   const div = document.createElement('div');
   div.style.cssText = 'display:flex;gap:8px;' + (role === 'user' ? 'align-self:flex-end;flex-direction:row-reverse;' : '');
@@ -1124,11 +1182,15 @@ function addChatMsg(role, text) {
     <div style="width:26px;height:26px;border-radius:50%;background:${avBg};color:${avColor};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;margin-top:2px;">${av}</div>
     <div style="background:${bubbleBg};border:0.5px solid ${bubbleBorder};border-radius:10px;padding:10px 14px;font-size:12px;line-height:1.6;color:${bubbleColor};max-width:85%;">${formatChat(text)}</div>`;
   container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
+  if (scroll) container.scrollTop = container.scrollHeight;
 }
 
 function formatChat(text) {
-  return '<p>' + text.replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--teal);">$1</strong>').replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+  const withLinks = text.replace(/\*\*(.*?)\*\*/g, (match, cardName) => {
+    const safe = cardName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    return `<span class="chat-card-link" onclick="openCardModal('${safe}')">${cardName}</span>`;
+  });
+  return '<p>' + withLinks.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
 }
 
 function addChatTyping() {
