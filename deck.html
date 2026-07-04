@@ -335,7 +335,10 @@ async function init() {
     state.wincon = deck.win_con || '';
     state.theme = deck.theme || '';
     state.powerLevel = deck.power_level || 3;
-    state.collection = new Set((collection || []).map(c => c.toLowerCase()));
+    state.collection = new Set((collection || []).map(c => {
+      const name = typeof c === 'string' ? c : (c.name || '');
+      return name.toLowerCase().replace(/\s*\/\/.*$/, '').trim();
+    }));
     document.getElementById('deckBanner').style.display = 'flex';
     document.getElementById('deckTabs').style.display = 'flex';
     document.getElementById('bannerTitle').textContent = state.deck.name || state.cards[0] || 'Deck';
@@ -361,7 +364,7 @@ function renderBannerSub() {
   const cards = state.cards;
   const commander = cards[0] || '';
   const commanderData = state.cardData[commander.toLowerCase()];
-  const colorId = commanderData?.color_identity || state.deck.color_identity ? JSON.parse(state.deck.color_identity || '[]') : [];
+  const colorId = commanderData?.color_identity || (state.deck.color_identity ? JSON.parse(state.deck.color_identity) : []);
   const guild = TM.getGuildName(colorId);
   const sub = document.getElementById('bannerSub');
   sub.innerHTML = `
