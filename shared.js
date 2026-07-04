@@ -150,9 +150,19 @@ async function fetchScryfallBulk(cardNames) {
             set_name: card.set_name || '',
           };
           const key = card.name.toLowerCase();
-          const simpleKey = card.name.split(' // ')[0].toLowerCase();
+          const simpleKey = card.name.split(' // ')[0].toLowerCase().trim();
           results[key] = cardData;
           results[simpleKey] = cardData;
+          // Also store under any requested name that partially matches
+          // (handles cases where requested name differs slightly from returned name)
+          batch.forEach(requestedName => {
+            const rk = requestedName.toLowerCase();
+            const rks = requestedName.split(' // ')[0].toLowerCase().trim();
+            if (rks === simpleKey || rk === key) {
+              results[rk] = cardData;
+              results[rks] = cardData;
+            }
+          });
         });
       }
     } catch (e) { console.warn('Scryfall batch failed', e); }
