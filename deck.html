@@ -419,7 +419,7 @@ function renderCardsTab() {
         const imgUrl = d?.image_uris?.normal || '';
         html += `<div class="mtg-card" onclick="openCardModal('${name.replace(/'/g, "\\'")}')">
           ${imgUrl ? `<img src="${imgUrl}" alt="${name}" loading="lazy">` : `<div class="mtg-card-name-fallback">${name}</div>`}
-          ${!imgUrl ? `<div class="mtg-card-bottom">${name}</div>` : ''}
+          <div class="mtg-card-bottom">${name.split(' // ')[0]}</div>
           ${owned ? '<div class="own-dot"></div>' : ''}
         </div>`;
       });
@@ -456,8 +456,13 @@ function groupCards(cards, groupBy, sortBy) {
     let key = 'Other';
     if (groupBy === 'type') {
       const t = d?.type_line || '';
-      const normName = name.split(' // ')[0].trim();
-      const normCommander = state.cards[0].split(' // ')[0].trim();
+      const normName = name.split(' // ')[0].trim().toLowerCase();
+      const normCommander = state.cards[0].split(' // ')[0].trim().toLowerCase();
+      // Try both full DFC name and front face for card data
+      const dFull = state.cardData[name.toLowerCase()];
+      const dFront = state.cardData[name.split(' // ')[0].toLowerCase().trim()];
+      const dResolved = dFull || dFront;
+      const t = dResolved?.type_line || '';
       if (normName === normCommander || name === state.cards[0]) key = 'Commander';
       else if (t.includes('Creature')) key = 'Creatures';
       else if (t.includes('Instant')) key = 'Instants';
@@ -466,6 +471,7 @@ function groupCards(cards, groupBy, sortBy) {
       else if (t.includes('Enchantment')) key = 'Enchantments';
       else if (t.includes('Planeswalker')) key = 'Planeswalkers';
       else if (t.includes('Land') || TM.isLand(name, state.cardData)) key = 'Lands';
+      else if (!t) key = 'Other';
       else key = 'Other';
     } else if (groupBy === 'color') {
       const ci = d?.color_identity || [];
@@ -848,7 +854,7 @@ Return JSON only, no markdown:
       const owned = state.collection.has(r.name.toLowerCase());
       const d = state.cardData[r.name.toLowerCase()];
       const img = d?.image_uris?.small || '';
-      return `<div class="rec-card">
+      return `<div class="rec-card" onclick="openCardModal('${r.name.replace(/'/g,"\'")}')" style="cursor:pointer;">
         <div class="rec-thumb">${img ? `<img src="${img}" alt="${r.name}">` : r.name.split(',')[0]}</div>
         <div style="flex:1;">
           <div style="font-size:13px;font-weight:600;color:var(--black);margin-bottom:3px;">${r.name}</div>
@@ -861,6 +867,7 @@ Return JSON only, no markdown:
         </div>
       </div>`;
     }
+    const allRecNames = [...(parsed.best || []), ...(parsed.themed || [])].map(r => r.name);
     container.innerHTML = `
       <div style="padding:20px 24px;">
         <div class="rec-layout">
@@ -876,6 +883,23 @@ Return JSON only, no markdown:
           </div>
         </div>
       </div>`;
+    // Fetch images for recommended cards
+    if (allRecNames.length > 0) {
+      TM.fetchScryfallBulk(allRecNames).then(recData => {
+        Object.assign(state.cardData, recData);
+        allRecNames.forEach(name => {
+          const d = recData[name.toLowerCase()] || recData[name.split(' // ')[0].toLowerCase().trim()];
+          if (!d?.image_uris) return;
+          const img = d.image_uris.small || d.image_uris.normal;
+          if (!img) return;
+          container.querySelectorAll('.rec-thumb').forEach(thumb => {
+            if (thumb.textContent.trim() === name.split(',')[0] || thumb.querySelector('img')?.alt === name) {
+              thumb.innerHTML = `<img src="${img}" alt="${name}" style="width:100%;height:100%;object-fit:cover;">`;
+            }
+          });
+        });
+      }).catch(() => {});
+    }
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load recommendations</div><div class="empty-sub">${e.message}</div></div>`;
   }
