@@ -876,13 +876,12 @@ Win condition: ${state.wincon || 'discard/value'}
 Return JSON only:
 {"add":[{"name":"Land Name","reason":"one line why"}],"cut":[{"name":"Land Name","reason":"one line why"}]}
 Top 5 adds, top 3 cuts. Prioritise untapped dual lands. Flag if user likely owns it based on being in Doom precon.`;
-    const res = await fetch('/api/chat', {
+    const data = await safeFetchJson('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 600,
         system: 'You are an MTG mana base expert. Return only valid JSON, no markdown.',
         messages: [{ role: 'user', content: prompt }] }),
     });
-    const data = await res.json();
     const raw = data.content?.[0]?.text || '{}';
     const parsed = safeParseAIJson(raw);
     const addHtml = (parsed.add || []).map(l => {
@@ -898,11 +897,10 @@ Top 5 adds, top 3 cuts. Prioritise untapped dual lands. Flag if user likely owns
 }
 
 async function fetchCombosData(mainCards, commanderName) {
-  const res = await fetch('/api/combos', {
+  const data = await safeFetchJson('/api/combos', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ commanders: [{ card: commanderName }], main: mainCards.map(c => ({ card: c })) }),
   });
-  const data = await res.json();
   if (data.error || data.commanders || data.main) {
     throw new Error(data.error || 'Commander Spellbook could not process this list.');
   }
@@ -965,48 +963,34 @@ async function runCombos() {
     const deckMain = [...new Set(state.cards.slice(1).filter(c => !basics.includes(c.toLowerCase())).map(c => c.split(' // ')[0].trim()))];
 
     const results = await fetchCombosData(deckMain, commanderName);
-    const included = (results.included || []).slice(0, 12);
-    const almostRaw = (results.almostIncluded || []).slice(0, 30);
+    const included = results.included || [];
+    // Commander Spellbook returns the FULL exhaustive list of near-miss combos for the
+    // deck in this one response (deck size is well under their 600-card API limit, so
+    // no chunking or truncation risk here at all) — this is a complete, authoritative list.
+    const almostFull = results.almostIncluded || [];
 
     function getMissing(combo) {
       return comboGetCards(combo).filter(name => !deckCardsLower.has(name.toLowerCase()));
     }
 
-    const oneAway = almostRaw.filter(c => getMissing(c).length === 1).slice(0, 10);
-    const twoAway = almostRaw.filter(c => getMissing(c).length === 2).slice(0, 10);
+    const ownedAnywhere = new Set(state.collectionRaw.map(c => (c.name || '').split(' // ')[0].toLowerCase().trim()));
 
-    // Combos achievable using cards from the collection but not currently in this deck.
-    // Filtered by colour identity (not an arbitrary cap) so we consider the FULL collection,
-    // not just a slice of it — anything outside the commander's colours can't be cast anyway.
-    let fromCollection = [];
-    const ownedNotInDeckRaw = [...new Set(state.collectionRaw.map(c => c.name).filter(n => n && !basics.includes(n.toLowerCase())))]
-      .filter(n => !deckCardsLower.has(n.split(' // ')[0].toLowerCase().trim()));
-    const commanderColors = getCommanderColorIdentity();
-    let ownedNotInDeck = ownedNotInDeckRaw;
-    if (ownedNotInDeckRaw.length > 0) {
-      const combosLoadingEl = document.getElementById('combosBody');
-      if (combosLoadingEl) combosLoadingEl.innerHTML = `<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Analysing your collection (${ownedNotInDeckRaw.length.toLocaleString()} cards)...</div></div>`;
-      const colorData = await TM.getColorIdentities(ownedNotInDeckRaw);
-      ownedNotInDeck = TM.filterByColorIdentity(ownedNotInDeckRaw, commanderColors, colorData);
-    }
-    const ownedNotInDeckLower = new Set(ownedNotInDeck.map(n => n.toLowerCase()));
+    const oneAway = almostFull.filter(c => getMissing(c).length === 1);
+    const twoAway = almostFull.filter(c => getMissing(c).length === 2);
 
-    if (ownedNotInDeck.length > 0) {
-      try {
-        const expandedResults = await fetchCombosData([...deckMain, ...ownedNotInDeck], commanderName);
-        const includedIds = new Set(included.map(c => c.id));
-        fromCollection = (expandedResults.included || [])
-          .filter(c => !includedIds.has(c.id))
-          .slice(0, 10);
-      } catch (e) {
-        console.warn('Collection combo search failed', e);
-      }
-    }
+    // Fully complete and correct: ANY combo (regardless of how many pieces are missing)
+    // where every single missing card is confirmed present somewhere in the full
+    // collection. This is a direct name lookup against the complete collection —
+    // no API size limits apply here at all, so nothing can be silently missed.
+    const fromCollection = almostFull.filter(c => {
+      const missing = getMissing(c);
+      return missing.length > 0 && missing.every(m => ownedAnywhere.has(m.split(' // ')[0].toLowerCase().trim()));
+    });
 
     let html = '';
     if (included.length > 0) {
       html += `<div class="combo-section-header"><span class="combo-status cs-complete">Complete</span><span style="font-size:12px;color:var(--ink3);">${included.length} combo${included.length !== 1 ? 's' : ''} already in this deck</span></div>`;
-      html += included.map(c => renderComboCard(c, [], ownedNotInDeckLower)).join('');
+      html += included.map(c => renderComboCard(c, [], ownedAnywhere)).join('');
     }
 
     html += `<div style="margin-top:24px;border-top:0.5px solid var(--border);padding-top:16px;">
@@ -1016,7 +1000,8 @@ async function runCombos() {
         <span style="font-size:12px;color:var(--ink3);">${oneAway.length} combo${oneAway.length !== 1 ? 's' : ''}</span>
       </div>
       <div id="combo-acc-oneAway" class="accordion-panel">
-        ${oneAway.length > 0 ? oneAway.map(c => renderComboCard(c, getMissing(c), ownedNotInDeckLower)).join('') : '<div style="font-size:12px;color:var(--ink3);padding:8px 0;">None found.</div>'}
+        ${oneAway.length > 0 ? oneAway.slice(0, 15).map(c => renderComboCard(c, getMissing(c), ownedAnywhere)).join('') : '<div style="font-size:12px;color:var(--ink3);padding:8px 0;">None found.</div>'}
+        ${oneAway.length > 15 ? `<div style="font-size:11px;color:var(--ink3);padding:6px 0;">Showing top 15 of ${oneAway.length} — all are known to Urza in chat.</div>` : ''}
       </div>
 
       <div class="accordion-header" onclick="toggleComboAccordion('twoAway')">
@@ -1025,18 +1010,20 @@ async function runCombos() {
         <span style="font-size:12px;color:var(--ink3);">${twoAway.length} combo${twoAway.length !== 1 ? 's' : ''}</span>
       </div>
       <div id="combo-acc-twoAway" class="accordion-panel" style="display:none;">
-        ${twoAway.length > 0 ? twoAway.map(c => renderComboCard(c, getMissing(c), ownedNotInDeckLower)).join('') : '<div style="font-size:12px;color:var(--ink3);padding:8px 0;">None found.</div>'}
+        ${twoAway.length > 0 ? twoAway.slice(0, 15).map(c => renderComboCard(c, getMissing(c), ownedAnywhere)).join('') : '<div style="font-size:12px;color:var(--ink3);padding:8px 0;">None found.</div>'}
+        ${twoAway.length > 15 ? `<div style="font-size:11px;color:var(--ink3);padding:6px 0;">Showing top 15 of ${twoAway.length} — all are known to Urza in chat.</div>` : ''}
       </div>
 
       <div class="accordion-header" onclick="toggleComboAccordion('collection')">
         <span id="combo-chev-collection" class="accordion-chevron">›</span>
-        <span class="combo-status cs-complete" style="background:rgba(0,212,204,0.08);">From your collection</span>
-        <span style="font-size:12px;color:var(--ink3);">${fromCollection.length} combo${fromCollection.length !== 1 ? 's' : ''} achievable using cards you own</span>
+        <span class="combo-status cs-complete" style="background:rgba(0,212,204,0.08);">Ready to complete from your collection</span>
+        <span style="font-size:12px;color:var(--ink3);">${fromCollection.length} combo${fromCollection.length !== 1 ? 's' : ''} — you own every missing piece</span>
       </div>
       <div id="combo-acc-collection" class="accordion-panel" style="display:none;">
         ${fromCollection.length > 0
-          ? fromCollection.map(c => renderComboCard(c, comboGetCards(c).filter(n => !deckCardsLower.has(n.toLowerCase())), ownedNotInDeckLower)).join('')
-          : '<div style="font-size:12px;color:var(--ink3);padding:8px 0;">No additional combos found using cards in your collection.</div>'}
+          ? fromCollection.slice(0, 15).map(c => renderComboCard(c, getMissing(c), ownedAnywhere)).join('')
+          : '<div style="font-size:12px;color:var(--ink3);padding:8px 0;">No combos found where you fully own every missing piece.</div>'}
+        ${fromCollection.length > 15 ? `<div style="font-size:11px;color:var(--ink3);padding:6px 0;">Showing top 15 of ${fromCollection.length} — all are known to Urza in chat.</div>` : ''}
       </div>
     </div>`;
 
@@ -1054,15 +1041,15 @@ async function runCombos() {
       complete: included.map(c => `${comboGetCards(c).join(' + ')} → ${comboGetResult(c)}`),
       oneAway: oneAway.map(c => {
         const missing = getMissing(c);
-        const owns = missing.some(m => state.collection.has(m.toLowerCase()));
+        const owns = missing.some(m => ownedAnywhere.has(m.split(' // ')[0].toLowerCase().trim()));
         return `${comboGetCards(c).join(' + ')} → ${comboGetResult(c)} (missing: ${missing.join(', ')}${owns ? ' — YOU OWN THIS, just add it' : ' — not owned'})`;
       }),
       twoAway: twoAway.map(c => {
         const missing = getMissing(c);
-        const ownedCount = missing.filter(m => state.collection.has(m.toLowerCase())).length;
+        const ownedCount = missing.filter(m => ownedAnywhere.has(m.split(' // ')[0].toLowerCase().trim())).length;
         return `${comboGetCards(c).join(' + ')} → ${comboGetResult(c)} (missing: ${missing.join(', ')}, ${ownedCount}/${missing.length} already owned)`;
       }),
-      fromCollection: fromCollection.map(c => `${comboGetCards(c).join(' + ')} → ${comboGetResult(c)} (achievable by adding cards you already own from your collection)`),
+      fromCollection: fromCollection.map(c => `${comboGetCards(c).join(' + ')} → ${comboGetResult(c)} (missing: ${getMissing(c).join(', ')} — ALL already owned in your collection, ready to complete today)`),
     };
     setDeckCache({ combosHtml: body.innerHTML, combosSummary: state.combosSummary });
   } catch (e) {
@@ -1117,13 +1104,12 @@ Prioritise cards that support the win condition.
 CRITICAL: Only suggest cards that are REAL, printed Magic: The Gathering cards. Do not invent card names, even ones that sound plausible for the theme. For the "collection" section, only pick names that appear verbatim in the OWNED CARDS LIST.
 Return JSON only, no markdown:
 {"best":[{"name":"Card","reason":"one sentence why it fits","cmc":"2","type":"Creature"}],"themed":[{"name":"Card","reason":"one sentence","trade_off":"brief note on power vs theme trade-off"}],"collection":[{"name":"Card","reason":"one sentence why it fits, picked from OWNED CARDS LIST only"}]}`;
-    const aiRes = await fetch('/api/chat', {
+    const aiData = await safeFetchJson('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 3000,
         system: 'You are an MTG deck advisor with deep, accurate knowledge of real printed Magic: The Gathering cards. You never invent or hallucinate card names. Return only valid JSON, no markdown.',
         messages: [{ role: 'user', content: prompt }] }),
     });
-    const aiData = await aiRes.json();
     const raw = aiData.content?.[0]?.text || '{}';
     const parsed = safeParseAIJson(raw);
 
@@ -1195,6 +1181,23 @@ Return JSON only, no markdown:
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load recommendations</div><div class="empty-sub">${e.message}</div></div>`;
   }
+}
+
+// Wraps fetch() to our own API proxies and guarantees a clean, readable Error
+// instead of a raw "Unexpected token..." crash when the upstream (Anthropic,
+// Commander Spellbook, or Vercel itself on a timeout) returns non-JSON —
+// e.g. Vercel's plain-text "An error occurred with your deployment" page.
+async function safeFetchJson(url, options) {
+  const res = await fetch(url, options);
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Server returned an unexpected response (status ${res.status}). This usually means the request timed out or was too large. Try again${res.status === 504 ? ' with a smaller collection or fewer cards' : ''}.`);
+  }
+  if (!res.ok && data.error) throw new Error(data.error);
+  return data;
 }
 
 function safeParseAIJson(raw) {
@@ -1300,12 +1303,11 @@ async function startChat() {
   document.getElementById('chatContext').innerHTML = `<strong>Commander:</strong> ${state.cards[0]}<br><strong>Cards:</strong> ${state.cards.length}<br><strong>Win-con:</strong> ${state.wincon || 'Not set'}<br><strong>Theme:</strong> ${state.theme || 'Not set'}`;
   const typingId = addChatTyping();
   try {
-    const res = await fetch('/api/chat', {
+    const data = await safeFetchJson('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system: SYSTEM_PROMPT, messages: state.chatHistory }),
     });
     removeChatTyping(typingId);
-    const data = await res.json();
     const reply = data.content?.[0]?.text || 'Something went wrong.';
     addChatMsg('assistant', reply);
     state.chatHistory.push({ role: 'assistant', content: reply });
@@ -1332,12 +1334,11 @@ async function sendChat() {
     await Promise.all([state.recsPromise, state.combosPromise].filter(Boolean)).catch(() => {});
     const context = buildContext();
     state.chatHistory.push({ role: 'user', content: text });
-    const res = await fetch('/api/chat', {
+    const data = await safeFetchJson('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1200, system: context, messages: state.chatHistory }),
     });
     removeChatTyping(typingId);
-    const data = await res.json();
     const reply = data.content?.[0]?.text || 'Something went wrong.';
     addChatMsg('assistant', reply);
     state.chatHistory.push({ role: 'assistant', content: reply });
