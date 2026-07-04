@@ -325,13 +325,17 @@ async function init() {
     const [decks, collection] = await Promise.all([TM.getDecks(), TM.getCollection()]);
     allDecks = decks;
     collectionCards = collection || [];
-    parsedCollection = new Set(collectionCards.map(c => c.toLowerCase()));
+    parsedCollection = new Set(collectionCards.map(c => {
+      const name = typeof c === 'string' ? c : (c.name || '');
+      return name.toLowerCase().replace(/\s*\/\/.*$/, '').trim();
+    }));
     renderDecks(decks);
-    renderCollectionBar(collectionCards.length);
+    renderCollectionBar(collectionCards.length, collectionCards);
   } catch (e) {
+    console.error(e);
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('decksContainer').style.display = 'block';
-    document.getElementById('deckSubtitle').textContent = 'Could not load decks.';
+    document.getElementById('deckSubtitle').innerHTML = 'Could not load decks.<div style="margin-top:8px;font-family:monospace;font-size:11px;text-align:left;background:var(--card);padding:12px;border-radius:8px;border:0.5px solid var(--border);white-space:pre-wrap;">' + ((e && e.message) || String(e)) + '</div>';
   }
 }
 
@@ -481,7 +485,8 @@ async function saveCollectionData() {
   const cards = TM.parseCollection(text);
   const statusEl = document.getElementById('collStatus');
   statusEl.textContent = 'Validating...';
-  const validation = await TM.validateCollection(cards);
+  const cardNames = cards.map(c => c.name);
+  const validation = await TM.validateCollection(cardNames);
   if (!validation.ok) {
     statusEl.style.color = 'var(--pink)';
     statusEl.style.whiteSpace = 'pre-line';
@@ -496,7 +501,7 @@ async function saveCollectionData() {
     statusEl.textContent = `✓ ${cards.length} cards validated and saved.`;
   }
   await TM.saveCollection(cards);
-  parsedCollection = new Set(cards);
+  parsedCollection = new Set(cards.map(c => c.name.toLowerCase()));
   renderCollectionBar(cards.length);
   setTimeout(closeCollectionModal, 1200);
 }
