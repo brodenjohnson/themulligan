@@ -1,7 +1,9 @@
 const SUPABASE_URL = 'https://qowhaosiuwcxlfyypqcx.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvd2hhb3NpdXdjeGxmeXlwcWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxMTcxNTcsImV4cCI6MjA5ODY5MzE1N30.k3P_wunsm834buQIS2pTVE39Q8ZgEDZ1-DhdNJ6PxUs';
 
-async function sbFetch(path, options = {}) {
+let refreshPromise = null;
+
+async function sbFetch(path, options = {}, isRetry = false) {
   const session = getSession();
   const headers = {
     'apikey': SUPABASE_KEY,
@@ -12,9 +14,43 @@ async function sbFetch(path, options = {}) {
   const res = await fetch(`${SUPABASE_URL}${path}`, { ...options, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || err.error_description || `HTTP ${res.status}`);
+    const msg = err.message || err.error_description || err.msg || `HTTP ${res.status}`;
+    const isExpired = res.status === 401 && /jwt expired|invalid jwt|jwt is expired/i.test(msg);
+    if (isExpired && !isRetry && session?.refresh_token) {
+      const refreshed = await refreshSession();
+      if (refreshed) return sbFetch(path, options, true);
+      setSession(null);
+      window.location.href = '/login';
+      throw new Error('Session expired. Redirecting to sign in.');
+    }
+    throw new Error(msg);
   }
   return res.status === 204 ? null : res.json();
+}
+
+async function refreshSession() {
+  if (refreshPromise) return refreshPromise;
+  const session = getSession();
+  if (!session?.refresh_token) return false;
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: session.refresh_token }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (!data.access_token) return false;
+      setSession(data);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
 }
 
 function getSession() {
@@ -62,6 +98,10 @@ async function signOut() {
 function requireAuth() {
   const session = getSession();
   if (!session) { window.location.href = '/login'; return null; }
+  const expiresAt = session.expires_at ? session.expires_at * 1000 : 0;
+  if (expiresAt && expiresAt < Date.now() + 60000) {
+    refreshSession().then(ok => { if (!ok) { setSession(null); window.location.href = '/login'; } });
+  }
   return session;
 }
 
@@ -384,7 +424,7 @@ function isTappedLand(name) {
 
 window.TM = {
   SUPABASE_URL, SUPABASE_KEY,
-  sbFetch, getSession, setSession, signIn, signUp, signOut, requireAuth,
+  sbFetch, getSession, setSession, signIn, signUp, signOut, requireAuth, refreshSession,
   getDecks, getDeck, saveDeck, deleteDeck, getCollection, saveCollection,
   fetchScryfallBulk, parseDeckList, parseCollection,
   countPips, recommendedSources,
