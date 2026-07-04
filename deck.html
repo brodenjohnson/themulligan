@@ -918,23 +918,40 @@ Power level: ${state.powerLevel}/5
 Current deck (first 30): ${state.cards.slice(0, 30).join(', ')}
 ${recSuggestions}
 
-Based on this deck's strategy, pick the top 8 best card upgrades not already in the deck. Then pick up to 6 themed alternatives${state.theme ? ` for theme: ${state.theme}` : ''}.
-Prioritise cards that support the win condition. Be specific — real card names only.
+Based on this deck's strategy, pick the top 10 best card upgrades not already in the deck. Then pick up to 8 themed alternatives${state.theme ? ` for theme: ${state.theme}` : ''}.
+Prioritise cards that support the win condition.
+CRITICAL: Only suggest cards that are REAL, printed Magic: The Gathering cards. Do not invent card names, even ones that sound plausible for the theme. If you are not certain a card exists exactly as named, do not include it.
 Return JSON only, no markdown:
 {"best":[{"name":"Card","reason":"one sentence why it fits","cmc":"2","type":"Creature"}],"themed":[{"name":"Card","reason":"one sentence","trade_off":"brief note on power vs theme trade-off"}]}`;
     const aiRes = await fetch('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000,
-        system: 'You are an MTG deck advisor. Return only valid JSON, no markdown.',
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1200,
+        system: 'You are an MTG deck advisor with deep, accurate knowledge of real printed Magic: The Gathering cards. You never invent or hallucinate card names. Return only valid JSON, no markdown.',
         messages: [{ role: 'user', content: prompt }] }),
     });
     const aiData = await aiRes.json();
     const raw = aiData.content?.[0]?.text || '{}';
     const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+
+    // Validate every recommended card against Scryfall before showing anything.
+    // This is the safeguard against the AI inventing plausible-sounding fake cards.
+    const allRecNames = [...(parsed.best || []), ...(parsed.themed || [])].map(r => r.name);
+    let verifiedData = {};
+    if (allRecNames.length > 0) {
+      verifiedData = await TM.fetchScryfallBulk(allRecNames);
+      Object.assign(state.cardData, verifiedData);
+    }
+    function isVerified(name) {
+      return !!(verifiedData[name.toLowerCase()] || verifiedData[name.split(' // ')[0].toLowerCase().trim()]);
+    }
+    const verifiedBest = (parsed.best || []).filter(r => isVerified(r.name));
+    const verifiedThemed = (parsed.themed || []).filter(r => isVerified(r.name));
+    const droppedCount = allRecNames.length - verifiedBest.length - verifiedThemed.length;
+
     function recCard(r, themed = false) {
       const owned = state.collection.has(r.name.toLowerCase());
-      const d = state.cardData[r.name.toLowerCase()];
-      const img = d?.image_uris?.small || '';
+      const d = verifiedData[r.name.toLowerCase()] || verifiedData[r.name.split(' // ')[0].toLowerCase().trim()];
+      const img = d?.image_uris?.normal || d?.image_uris?.small || '';
       return `<div class="rec-card" onclick="openCardModal('${r.name.replace(/'/g,"\'")}')" style="cursor:pointer;">
         <div class="rec-thumb">${img ? `<img src="${img}" alt="${r.name}">` : r.name.split(',')[0]}</div>
         <div style="flex:1;">
@@ -948,39 +965,22 @@ Return JSON only, no markdown:
         </div>
       </div>`;
     }
-    const allRecNames = [...(parsed.best || []), ...(parsed.themed || [])].map(r => r.name);
     container.innerHTML = `
       <div style="padding:20px 24px;">
+        ${droppedCount > 0 ? `<div class="alert alert-warn" style="margin-bottom:14px;">Filtered out ${droppedCount} suggestion${droppedCount !== 1 ? 's' : ''} that couldn't be verified as real cards.</div>` : ''}
         <div class="rec-layout">
           <div>
             <div class="rec-col-header">Best cards <span class="badge badge-bracket" style="font-size:10px;">Performance</span></div>
-            ${(parsed.best || []).map(r => recCard(r, false)).join('') || '<div style="color:var(--ink3);font-size:13px;">No recommendations found.</div>'}
+            ${verifiedBest.map(r => recCard(r, false)).join('') || '<div style="color:var(--ink3);font-size:13px;">No verified recommendations found.</div>'}
           </div>
           <div>
             <div class="rec-col-header">Themed alternatives <span class="badge badge-teal" style="font-size:10px;">Flavour</span></div>
-            ${(parsed.themed || []).length > 0
-              ? (parsed.themed || []).map(r => recCard(r, true)).join('')
-              : `<div style="color:var(--ink3);font-size:13px;line-height:1.5;">${state.theme ? 'No themed alternatives found. Try asking Urza for specific suggestions.' : 'Set a theme in your deck to see themed alternatives here.'}</div>`}
+            ${verifiedThemed.length > 0
+              ? verifiedThemed.map(r => recCard(r, true)).join('')
+              : `<div style="color:var(--ink3);font-size:13px;line-height:1.5;">${state.theme ? 'No verified themed alternatives found. Try asking Urza for specific suggestions.' : 'Set a theme in your deck to see themed alternatives here.'}</div>`}
           </div>
         </div>
       </div>`;
-    // Fetch images for recommended cards
-    if (allRecNames.length > 0) {
-      TM.fetchScryfallBulk(allRecNames).then(recData => {
-        Object.assign(state.cardData, recData);
-        allRecNames.forEach(name => {
-          const d = recData[name.toLowerCase()] || recData[name.split(' // ')[0].toLowerCase().trim()];
-          if (!d?.image_uris) return;
-          const img = d.image_uris.small || d.image_uris.normal;
-          if (!img) return;
-          container.querySelectorAll('.rec-thumb').forEach(thumb => {
-            if (thumb.textContent.trim() === name.split(',')[0] || thumb.querySelector('img')?.alt === name) {
-              thumb.innerHTML = `<img src="${img}" alt="${name}" style="width:100%;height:100%;object-fit:cover;">`;
-            }
-          });
-        });
-      }).catch(() => {});
-    }
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load recommendations</div><div class="empty-sub">${e.message}</div></div>`;
   }
