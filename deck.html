@@ -153,9 +153,11 @@
         <option value="cmc">Sort: CMC</option>
       </select>
     </div>
-    <div style="display:flex;gap:4px;">
-      <div class="view-btn active" id="vbGrid" onclick="setView('grid')" title="Visual grid"><i class="ti ti-layout-grid" aria-hidden="true"></i></div>
-      <div class="view-btn" id="vbText" onclick="setView('text')" title="Text list"><i class="ti ti-list" aria-hidden="true"></i></div>
+    <div class="view-toggle-group">
+      <div class="view-toggle-btn" id="vbText" onclick="setView('text')" title="List"><i class="ti ti-list" aria-hidden="true"></i></div>
+      <div class="view-toggle-btn" id="vbStacks" onclick="setView('stacks')" title="Stacks"><i class="ti ti-stack-2" aria-hidden="true"></i></div>
+      <div class="view-toggle-btn active" id="vbGrid" onclick="setView('grid')" title="Grid"><i class="ti ti-layout-grid" aria-hidden="true"></i></div>
+      <div class="view-toggle-btn" id="vbSpoiler" onclick="setView('spoiler')" title="Spoiler"><i class="ti ti-eye" aria-hidden="true"></i></div>
     </div>
   </div>
   <div class="pane-body" id="cardsBody">
@@ -390,9 +392,23 @@ function switchTab(tab) {
 
 function setView(v) {
   state.currentView = v;
-  document.getElementById('vbGrid').classList.toggle('active', v === 'grid');
-  document.getElementById('vbText').classList.toggle('active', v === 'text');
+  ['vbText','vbStacks','vbGrid','vbSpoiler'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('active'); });
+  const map = { text: 'vbText', stacks: 'vbStacks', grid: 'vbGrid', spoiler: 'vbSpoiler' };
+  const activeEl = document.getElementById(map[v]);
+  if (activeEl) activeEl.classList.add('active');
   renderCardsTab();
+}
+
+function cardLookup(name) {
+  const dk = name.toLowerCase();
+  const dks = name.split(' // ')[0].toLowerCase().trim();
+  return state.cardData[dk] || state.cardData[dks];
+}
+
+function isOwnedCard(name) {
+  const dk = name.toLowerCase();
+  const dks = name.split(' // ')[0].toLowerCase().trim();
+  return state.collection.has(dk) || state.collection.has(dks);
 }
 
 function filterCards() { renderCardsTab(); }
@@ -405,24 +421,23 @@ function renderCardsTab() {
   const sortBy = document.getElementById('sortBy')?.value || 'name';
   const cards = state.cards.filter(c => !search || c.toLowerCase().includes(search));
   const groups = groupCards(cards, groupBy, sortBy);
-  const isGrid = state.currentView === 'grid';
+  const view = state.currentView;
+  if (view === 'spoiler') { renderSpoilerView(body, groups); return; }
   let html = '';
   for (const [label, groupCards2] of Object.entries(groups)) {
     if (groupCards2.length === 0) continue;
-    const totalPrice = groupCards2.reduce((sum, c) => sum + parseFloat(state.cardData[c.toLowerCase()]?.prices?.usd || 0), 0);
+    const totalPrice = groupCards2.reduce((sum, c) => sum + parseFloat(cardLookup(c)?.prices?.usd || 0), 0);
     html += `<div class="type-section">
       <div class="type-header">
         <span class="type-name">${label}</span>
         <span class="type-count-badge">${groupCards2.length}</span>
         ${totalPrice > 0 ? `<span class="type-price">$${totalPrice.toFixed(2)}</span>` : ''}
       </div>`;
-    if (isGrid) {
+    if (view === 'grid') {
       html += `<div class="card-grid">`;
       groupCards2.forEach(name => {
-        const _dk = name.toLowerCase();
-        const _dks = name.split(' // ')[0].toLowerCase().trim();
-        const d = state.cardData[_dk] || state.cardData[_dks];
-        const owned = state.collection.has(_dk) || state.collection.has(_dks);
+        const d = cardLookup(name);
+        const owned = isOwnedCard(name);
         const imgUrl = d?.image_uris?.normal || '';
         html += `<div class="mtg-card" onclick="openCardModal('${name.replace(/'/g, "\\'")}')">
           ${imgUrl ? `<img src="${imgUrl}" alt="${name}" loading="lazy">` : `<div class="mtg-card-name-fallback">${name}</div>`}
@@ -431,13 +446,21 @@ function renderCardsTab() {
         </div>`;
       });
       html += `</div>`;
+    } else if (view === 'stacks') {
+      html += `<div class="stacks-row">`;
+      groupCards2.forEach(name => {
+        const d = cardLookup(name);
+        const imgUrl = d?.image_uris?.normal || '';
+        html += `<div class="stacks-card" onclick="openCardModal('${name.replace(/'/g, "\\'")}')" title="${name}">
+          ${imgUrl ? `<img src="${imgUrl}" alt="${name}" loading="lazy">` : `<div class="stacks-card-fallback">${name.split(' // ')[0]}</div>`}
+        </div>`;
+      });
+      html += `</div>`;
     } else {
       html += `<div class="text-list">`;
       groupCards2.forEach(name => {
-        const dk = name.toLowerCase();
-        const dks = name.split(' // ')[0].toLowerCase().trim();
-        const d = state.cardData[dk] || state.cardData[dks];
-        const owned = state.collection.has(dk) || state.collection.has(dks);
+        const d = cardLookup(name);
+        const owned = isOwnedCard(name);
         html += `<div class="text-item" onclick="openCardModal('${name.replace(/'/g, "\\'")}')">
           ${owned ? '<div class="own-dot" style="position:static;flex-shrink:0;"></div>' : '<div style="width:7px;"></div>'}
           <span class="text-item-name">${name}</span>
@@ -450,6 +473,49 @@ function renderCardsTab() {
     html += `</div>`;
   }
   body.innerHTML = html || '<div class="empty-state"><div class="empty-title">No cards found</div></div>';
+}
+
+function renderSpoilerView(body, groups) {
+  const allCards = Object.values(groups).flat();
+  const firstCard = allCards[0] || state.cards[0];
+  let listHtml = '';
+  for (const [label, groupCards2] of Object.entries(groups)) {
+    if (groupCards2.length === 0) continue;
+    listHtml += `<div style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:0.4px;margin:14px 0 6px;padding:0 10px;">${label} <span style="color:var(--ink4);font-weight:400;">${groupCards2.length}</span></div>`;
+    groupCards2.forEach(name => {
+      const d = cardLookup(name);
+      const safe = name.replace(/'/g, "\\'");
+      listHtml += `<div class="spoiler-row" data-card="${name.replace(/"/g,'&quot;')}" onmouseenter="updateSpoilerPreview('${safe}')" onclick="openCardModal('${safe}')">
+        <span style="flex:1;">${name}</span>
+        <span class="spoiler-row-type">${d?.type_line?.split('—')[0]?.trim() || ''}</span>
+        <span class="spoiler-row-cmc">${d?.cmc > 0 ? d.cmc : ''}</span>
+      </div>`;
+    });
+  }
+  body.innerHTML = `<div class="spoiler-layout">
+    <div class="spoiler-preview-col" id="spoilerPreviewCol">
+      ${spoilerPreviewHtml(firstCard)}
+    </div>
+    <div class="spoiler-list-col">${listHtml}</div>
+  </div>`;
+}
+
+function spoilerPreviewHtml(name) {
+  const d = cardLookup(name);
+  const img = d?.image_uris?.normal || '';
+  return `<div class="spoiler-preview-img-wrap">
+      ${img ? `<img src="${img}" alt="${name}">` : `<div class="spoiler-preview-fallback">${name}</div>`}
+    </div>
+    <div class="spoiler-preview-caption">${name}${d?.mana_cost ? ' · ' + d.mana_cost : ''}</div>`;
+}
+
+function updateSpoilerPreview(name) {
+  const col = document.getElementById('spoilerPreviewCol');
+  if (!col) return;
+  col.innerHTML = spoilerPreviewHtml(name);
+  document.querySelectorAll('.spoiler-row').forEach(row => {
+    row.classList.toggle('active', row.dataset.card === name);
+  });
 }
 
 function groupCards(cards, groupBy, sortBy) {
