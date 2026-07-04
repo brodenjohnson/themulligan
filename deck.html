@@ -462,7 +462,6 @@ function groupCards(cards, groupBy, sortBy) {
     const d = state.cardData[name.toLowerCase()];
     let key = 'Other';
     if (groupBy === 'type') {
-      const t = d?.type_line || '';
       const normName = name.split(' // ')[0].trim().toLowerCase();
       const normCommander = state.cards[0].split(' // ')[0].trim().toLowerCase();
       // Try both full DFC name and front face for card data
