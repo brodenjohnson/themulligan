@@ -224,6 +224,82 @@ async function fetchScryfallBulk(cardNames) {
   return results;
 }
 
+const COLOR_CACHE_KEY = 'mulligan_card_colors_v1';
+
+function getColorCache() {
+  try {
+    const raw = localStorage.getItem(COLOR_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function setColorCache(cache) {
+  try {
+    localStorage.setItem(COLOR_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    console.warn('Colour cache write failed — collection may be very large, cache skipped', e);
+  }
+}
+
+// Returns { [nameLower]: { color_identity: string[], is_land: boolean } } for every
+// requested name. Looks up a persistent local cache first (keyed by card name, shared
+// across all decks and collection uploads) and only queries Scryfall for names not yet
+// cached. This is what makes full-collection colour filtering fast after the first run.
+async function getColorIdentities(names, onProgress) {
+  const cache = getColorCache();
+  const unique = [...new Set(names.map(n => n.split(' // ')[0].trim().toLowerCase()).filter(Boolean))];
+  const missing = unique.filter(n => !cache[n]);
+  if (missing.length > 0) {
+    const total = missing.length;
+    let done = 0;
+    for (let i = 0; i < missing.length; i += 75) {
+      const batch = missing.slice(i, i + 75);
+      try {
+        const res = await fetch('https://api.scryfall.com/cards/collection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifiers: batch.map(name => ({ name })) }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          (data.data || []).forEach(card => {
+            const key = card.name.split(' // ')[0].toLowerCase().trim();
+            const typeLine = card.type_line || card.card_faces?.[0]?.type_line || '';
+            cache[key] = {
+              color_identity: card.color_identity || [],
+              is_land: typeLine.includes('Land'),
+            };
+          });
+          // Anything Scryfall didn't recognise — mark as unknown so we don't keep re-querying it forever.
+          (data.not_found || []).forEach(nf => {
+            const key = (nf.name || '').toLowerCase();
+            if (key) cache[key] = { color_identity: null, is_land: false };
+          });
+        }
+      } catch (e) { console.warn('Colour lookup batch failed', e); }
+      done += batch.length;
+      if (onProgress) onProgress(Math.min(done, total), total);
+      if (i + 75 < missing.length) await new Promise(r => setTimeout(r, 100));
+    }
+    setColorCache(cache);
+  }
+  const result = {};
+  unique.forEach(n => { result[n] = cache[n] || { color_identity: null, is_land: false }; });
+  return result;
+}
+
+// Filters a list of card names down to only those castable in the given commander
+// colour identity (subset match), excluding basics/lands are kept as-is by caller.
+function filterByColorIdentity(names, commanderColors, colorData) {
+  const commanderSet = new Set(commanderColors || []);
+  return names.filter(name => {
+    const key = name.split(' // ')[0].trim().toLowerCase();
+    const info = colorData[key];
+    if (!info || info.color_identity === null) return false; // unknown card — exclude rather than risk an uncastable suggestion
+    return info.color_identity.every(c => commanderSet.has(c));
+  });
+}
+
 function parseDeckList(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   const cards = [];
@@ -445,4 +521,5 @@ window.TM = {
   isLand, isTappedLand,
   validateDeckList, validateCollection,
   parseCSVLine, collectionToLookup,
+  getColorIdentities, filterByColorIdentity,
 };
