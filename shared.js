@@ -159,8 +159,17 @@ async function saveCollection(cards) {
 async function fetchScryfallBulk(cardNames) {
   const results = {};
   const unique = [...new Set(cardNames.map(c => c.trim()).filter(Boolean))];
-  for (let i = 0; i < unique.length; i += 75) {
-    const batch = unique.slice(i, i + 75);
+  // Scryfall's bulk /cards/collection endpoint does not match "Front // Back" format —
+  // it needs the front face name only. Build a map from front-face name back to original names.
+  const frontFaceMap = {};
+  unique.forEach(name => {
+    const front = name.split(' // ')[0].trim();
+    if (!frontFaceMap[front]) frontFaceMap[front] = [];
+    frontFaceMap[front].push(name);
+  });
+  const frontFaceNames = Object.keys(frontFaceMap);
+  for (let i = 0; i < frontFaceNames.length; i += 75) {
+    const batch = frontFaceNames.slice(i, i + 75);
     try {
       const res = await fetch('https://api.scryfall.com/cards/collection', {
         method: 'POST',
@@ -189,24 +198,22 @@ async function fetchScryfallBulk(cardNames) {
             prices: card.prices || {},
             set_name: card.set_name || '',
           };
+          // Store under: full returned name, front face of returned name,
+          // and every original requested name that maps to this front face (handles
+          // cases where our deck list stores "Front // Back" but Scryfall was only
+          // queried with "Front").
           const key = card.name.toLowerCase();
           const simpleKey = card.name.split(' // ')[0].toLowerCase().trim();
           results[key] = cardData;
           results[simpleKey] = cardData;
-          // Also store under any requested name that partially matches
-          // (handles cases where requested name differs slightly from returned name)
-          batch.forEach(requestedName => {
-            const rk = requestedName.toLowerCase();
-            const rks = requestedName.split(' // ')[0].toLowerCase().trim();
-            if (rks === simpleKey || rk === key) {
-              results[rk] = cardData;
-              results[rks] = cardData;
-            }
+          const originalNames = frontFaceMap[simpleKey] || frontFaceMap[card.name] || [];
+          originalNames.forEach(origName => {
+            results[origName.toLowerCase()] = cardData;
           });
         });
       }
     } catch (e) { console.warn('Scryfall batch failed', e); }
-    if (i + 75 < unique.length) await new Promise(r => setTimeout(r, 150));
+    if (i + 75 < frontFaceNames.length) await new Promise(r => setTimeout(r, 150));
   }
   return results;
 }
