@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Mulligan — Deck</title>
+<link rel="stylesheet" href="/shared.css">
+<style>
+  .main { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+  .pane-body { padding: 20px 24px; background: var(--bg); min-height: 400px; }
+
+  /* CARDS TAB */
+  .type-section { margin-bottom: 20px; }
+  .type-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 0.5px solid var(--border); }
+  .type-icon { font-size: 13px; }
+  .type-name { font-size: 12px; font-weight: 600; color: var(--ink2); }
+  .type-count-badge { font-size: 10px; color: var(--ink3); background: var(--bg); border: 0.5px solid var(--border); border-radius: 10px; padding: 1px 7px; }
+  .type-price { font-size: 11px; color: var(--ink3); margin-left: auto; }
+
+  /* TEXT LIST VIEW */
+  .text-list { }
+  .text-item { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 0.5px solid var(--bg); font-size: 13px; }
+  .text-item:last-child { border-bottom: none; }
+  .text-item-name { flex: 1; color: var(--ink); }
+  .text-item-type { font-size: 11px; color: var(--ink3); width: 100px; }
+  .text-item-cmc { font-size: 11px; color: var(--ink3); width: 30px; text-align: center; }
+
+  /* CARD MODAL */
+  .card-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 400; align-items: center; justify-content: center; }
+  .card-modal-overlay.open { display: flex; }
+  .card-modal { background: var(--card); border-radius: var(--radius-lg); padding: 0; width: 560px; max-width: 92vw; overflow: hidden; border: 0.5px solid var(--border2); display: flex; }
+  .card-modal-img-col { width: 200px; flex-shrink: 0; background: var(--black); }
+  .card-modal-img-col img { width: 100%; }
+  .card-modal-info { padding: 20px; flex: 1; overflow-y: auto; max-height: 80vh; }
+  .cm-name { font-size: 16px; font-weight: 700; color: var(--black); margin-bottom: 2px; }
+  .cm-cost { font-size: 12px; color: var(--ink3); margin-bottom: 10px; }
+  .cm-type { font-size: 12px; color: var(--ink2); margin-bottom: 10px; padding-bottom: 10px; border-bottom: 0.5px solid var(--border); }
+  .cm-text { font-size: 12px; color: var(--ink); line-height: 1.6; margin-bottom: 12px; white-space: pre-wrap; }
+  .cm-pt { font-size: 13px; font-weight: 600; color: var(--black); margin-bottom: 10px; }
+  .cm-set { font-size: 11px; color: var(--ink3); }
+  .cm-close { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 20px; cursor: pointer; color: var(--ink3); line-height: 1; }
+
+  /* RECOMMENDATIONS */
+  .rec-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .rec-col-header { font-size: 11px; font-weight: 600; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+
+  /* COMBOS */
+  .combo-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; margin-top: 20px; }
+  .combo-section-header:first-child { margin-top: 0; }
+  .combo-status { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 10px; border: 0.5px solid; }
+  .cs-complete { background: rgba(0,212,204,0.1); color: #007a76; border-color: rgba(0,212,204,0.3); }
+  .cs-one { background: rgba(245,166,35,0.1); color: #8a6000; border-color: rgba(245,166,35,0.3); }
+  .cs-more { background: var(--bg); color: var(--ink3); border-color: var(--border); }
+
+  /* MANA BASE */
+  .mana-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .mana-card { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 12px; }
+  .mana-card-title { font-size: 12px; font-weight: 600; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .health-ring-wrap { position: relative; width: 64px; height: 64px; flex-shrink: 0; }
+  .health-ring-score { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; color: var(--black); }
+  .land-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 0.5px solid var(--bg); }
+  .land-item:last-child { border-bottom: none; }
+  .land-name { font-size: 12px; font-weight: 500; color: var(--black); }
+  .land-name-cut { color: var(--pink); }
+  .land-reason { font-size: 11px; color: var(--ink3); margin-top: 1px; }
+  .tapped-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .tapped-label { font-size: 11px; color: var(--ink2); width: 70px; flex-shrink: 0; }
+  .tapped-track { flex: 1; height: 8px; border-radius: 4px; overflow: hidden; background: var(--bg); }
+  .tapped-fill { height: 100%; border-radius: 4px; }
+  .tapped-pct { font-size: 11px; color: var(--ink3); width: 35px; text-align: right; }
+
+  /* STATS */
+  .stats-body { }
+  .chart-section { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 12px; }
+  .chart-section-title { font-size: 12px; font-weight: 600; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; }
+  .legend-row { display: flex; gap: 14px; margin-top: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--ink3); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* CHAT TAB */
+  .chat-layout { display: grid; grid-template-columns: 1fr 260px; gap: 16px; height: calc(100vh - 200px); }
+  .chat-main { display: flex; flex-direction: column; background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .chat-header { padding: 12px 16px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .chat-title { font-size: 13px; font-weight: 600; color: var(--black); }
+  .chat-badge { font-size: 11px; background: rgba(0,212,204,0.1); color: #007a76; border: 0.5px solid rgba(0,212,204,0.3); border-radius: 12px; padding: 2px 10px; }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .chat-input-row { padding: 10px 12px; border-top: 0.5px solid var(--border); display: flex; gap: 8px; }
+  .chat-input { flex: 1; font-size: 12px; border-radius: var(--radius); padding: 8px 10px; resize: none; max-height: 100px; }
+  .quick-panel { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 14px; overflow-y: auto; }
+  .quick-section-title { font-size: 10px; font-weight: 600; color: var(--ink4); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .quick-btn-item { display: block; width: 100%; text-align: left; background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); color: var(--ink2); font-size: 11px; padding: 8px 10px; margin-bottom: 5px; cursor: pointer; transition: all 0.1s; line-height: 1.4; }
+  .quick-btn-item:hover { background: rgba(0,212,204,0.05); border-color: rgba(0,212,204,0.3); color: var(--ink); }
+  .ctx-item { font-size: 11px; color: var(--ink3); margin-bottom: 4px; line-height: 1.4; }
+  .ctx-item strong { color: var(--ink2); }
+
+  @media (max-width: 768px) {
+    .rec-layout { grid-template-columns: 1fr; }
+    .mana-grid { grid-template-columns: 1fr; }
+    .chat-layout { grid-template-columns: 1fr; height: auto; }
+    .quick-panel { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="/" class="logo-wrap">
+    <div><div class="logo-text"><span class="the">the</span> Mulligan</div></div>
+    <div class="logo-dashes"><div class="ld ld1"></div><div class="ld ld2"></div><div class="ld ld3"></div></div>
+  </a>
+  <div class="topbar-nav">
+    <a href="/" class="nav-link">Your decks</a>
+  </div>
+  <div class="topbar-right">
+    <div class="avatar" id="userAvatar" onclick="TM.signOut()">B</div>
+  </div>
+</nav>
+
+<div id="deckBanner" class="deck-banner" style="display:none;">
+  <div>
+    <div class="banner-title" id="bannerTitle">Loading...</div>
+    <div class="banner-sub" id="bannerSub"></div>
+  </div>
+  <div style="display:flex;gap:8px;flex-shrink:0;">
+    <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);" onclick="shareDeck()">Share</button>
+    <button class="btn btn-teal btn-sm" onclick="switchTab('chat')">Ask Urza</button>
+  </div>
+</div>
+<div class="accent-bar"></div>
+
+<div class="deck-tabs" id="deckTabs" style="display:none;">
+  <button class="deck-tab active" onclick="switchTab('cards')">Cards</button>
+  <button class="deck-tab" onclick="switchTab('recs')">Recommendations</button>
+  <button class="deck-tab" onclick="switchTab('combos')">Combos</button>
+  <button class="deck-tab" onclick="switchTab('mana')">Mana base</button>
+  <button class="deck-tab" onclick="switchTab('stats')">Stats</button>
+  <button class="deck-tab" onclick="switchTab('chat')">Chat</button>
+</div>
+
+<!-- CARDS TAB -->
+<div class="pane active" id="pane-cards">
+  <div class="toolbar">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <input type="text" id="cardSearch" placeholder="Search cards..." style="width:160px;" oninput="filterCards()">
+      <select id="groupBy" onchange="renderCardsTab()" style="font-size:12px;">
+        <option value="type">Group: type</option>
+        <option value="color">Group: colour</option>
+        <option value="cmc">Group: CMC</option>
+      </select>
+      <select id="sortBy" onchange="renderCardsTab()" style="font-size:12px;">
+        <option value="name">Sort: name</option>
+        <option value="cmc">Sort: CMC</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:4px;">
+      <div class="view-btn active" id="vbGrid" onclick="setView('grid')" title="Visual grid"><i class="ti ti-layout-grid" aria-hidden="true"></i></div>
+      <div class="view-btn" id="vbText" onclick="setView('text')" title="Text list"><i class="ti ti-list" aria-hidden="true"></i></div>
+    </div>
+  </div>
+  <div class="pane-body" id="cardsBody">
+    <div class="empty-state"><div class="empty-title">Loading deck...</div></div>
+  </div>
+</div>
+
+<!-- RECOMMENDATIONS TAB -->
+<div class="pane" id="pane-recs">
+  <div class="pane-body">
+    <div id="recsContent">
+      <div class="empty-state"><div class="empty-title">Analyse your deck first</div><div class="empty-sub">Go to the Deck tab and load your cards.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- COMBOS TAB -->
+<div class="pane" id="pane-combos">
+  <div class="pane-body" id="combosBody">
+    <div class="empty-state"><div class="empty-title">Loading combos...</div></div>
+  </div>
+</div>
+
+<!-- MANA BASE TAB -->
+<div class="pane" id="pane-mana">
+  <div class="pane-body" id="manaBody">
+    <div class="empty-state"><div class="empty-title">Loading mana analysis...</div></div>
+  </div>
+</div>
+
+<!-- STATS TAB -->
+<div class="pane" id="pane-stats">
+  <div class="pane-body" id="statsBody">
+    <div class="empty-state"><div class="empty-title">Loading stats...</div></div>
+  </div>
+</div>
+
+<!-- CHAT TAB -->
+<div class="pane" id="pane-chat">
+  <div class="pane-body" style="padding:20px 24px;">
+    <div class="chat-layout">
+      <div class="chat-main">
+        <div class="chat-header">
+          <div class="chat-title">Urza</div>
+          <div class="chat-badge" id="chatBadge">No deck loaded</div>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+          <div style="display:flex;gap:8px;">
+            <div style="width:26px;height:26px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">U</div>
+            <div style="background:var(--bg);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:12px;line-height:1.6;"><p>Loading your deck...</p></div>
+          </div>
+        </div>
+        <div class="chat-input-row">
+          <textarea class="chat-input" id="chatInput" placeholder="Ask Urza about your deck..." rows="1" onkeydown="handleChatKey(event)" oninput="autoResize(this)"></textarea>
+          <button class="btn btn-teal btn-sm" onclick="sendChat()">↑</button>
+        </div>
+      </div>
+      <div class="quick-panel">
+        <div class="quick-section-title">Quick questions</div>
+        <button class="quick-btn-item" onclick="quickChat('What should I cut from this deck?')">What should I cut?</button>
+        <button class="quick-btn-item" onclick="quickChat('What are the best budget upgrades for this deck?')">Best budget upgrades?</button>
+        <button class="quick-btn-item" onclick="quickChat('Walk me through the main win condition step by step.')">Explain win condition</button>
+        <button class="quick-btn-item" onclick="quickChat('What combos does this deck have or is close to having?')">Combo lines?</button>
+        <button class="quick-btn-item" onclick="quickChat('How can I improve the mana base?')">Fix the mana base</button>
+        <button class="quick-btn-item" onclick="quickChat('What are the weakest cards in this deck?')">Weakest cards?</button>
+        <button class="quick-btn-item" onclick="quickChat('Suggest themed alternatives for slots where the best card does not fit the theme.')">Themed alternatives</button>
+        <div class="quick-section-title" style="margin-top:16px;">Deck context</div>
+        <div id="chatContext" class="ctx-item">Loading...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CARD DETAIL MODAL -->
+<div class="card-modal-overlay" id="cardModal">
+  <div class="card-modal" style="position:relative;">
+    <button class="cm-close" onclick="closeCardModal()">×</button>
+    <div class="card-modal-img-col" id="cmImgCol">
+      <img id="cmImg" src="" alt="" style="display:none;">
+      <div id="cmImgFallback" style="height:280px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:12px;padding:16px;text-align:center;"></div>
+    </div>
+    <div class="card-modal-info">
+      <div class="cm-name" id="cmName"></div>
+      <div class="cm-cost" id="cmCost"></div>
+      <div class="cm-type" id="cmType"></div>
+      <div class="cm-text" id="cmText"></div>
+      <div class="cm-pt" id="cmPt"></div>
+      <div class="cm-set" id="cmSet"></div>
+    </div>
+  </div>
+</div>
+
+<div class="urza-fab">
+  <button class="urza-pill" onclick="switchTab('chat')">
+    <div class="urza-dot"></div> Ask Urza
+  </button>
+</div>
+
+<script src="/shared.js"></script>
+<script>
+const session = TM.requireAuth();
+if (!session) throw new Error('redirect');
+
+document.getElementById('userAvatar').textContent = (session.user.email?.[0] || 'U').toUpperCase();
+
+const deckId = window.location.pathname.split('/deck/')[1];
+if (!deckId) window.location.href = '/';
+
+let state = {
+  deck: null, cards: [], cardData: {}, collection: new Set(),
+  chatHistory: [], currentView: 'grid', deckAnalysed: false,
+  wincon: '', theme: '', powerLevel: 3,
+};
+
+async function init() {
+  try {
+    const [deck, collection] = await Promise.all([TM.getDeck(deckId), TM.getCollection()]);
+    if (!deck) { window.location.href = '/'; return; }
+    state.deck = deck;
+    state.cards = TM.parseDeckList(deck.cardlist || '');
+    state.wincon = deck.win_con || '';
+    state.theme = deck.theme || '';
+    state.powerLevel = deck.power_level || 3;
+    state.collection = new Set((collection || []).map(c => c.toLowerCase()));
+    document.getElementById('deckBanner').style.display = 'flex';
+    document.getElementById('deckTabs').style.display = 'flex';
+    document.getElementById('bannerTitle').textContent = state.deck.name || state.cards[0] || 'Deck';
+    renderBannerSub();
+    document.title = `The Mulligan — ${state.deck.name || state.cards[0]}`;
+    document.getElementById('chatBadge').textContent = state.cards[0] || 'Deck';
+    const loading = document.getElementById('cardsBody');
+    loading.innerHTML = '<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Loading card data...</div></div>';
+    state.cardData = await TM.fetchScryfallBulk(state.cards);
+    state.deckAnalysed = true;
+    renderCardsTab();
+    renderStats();
+    renderManaBase();
+    runCombos();
+    runRecommendations();
+    startChat();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function renderBannerSub() {
+  const cards = state.cards;
+  const commander = cards[0] || '';
+  const commanderData = state.cardData[commander.toLowerCase()];
+  const colorId = commanderData?.color_identity || state.deck.color_identity ? JSON.parse(state.deck.color_identity || '[]') : [];
+  const guild = TM.getGuildName(colorId);
+  const sub = document.getElementById('bannerSub');
+  sub.innerHTML = `
+    <span class="badge badge-bracket">[${state.powerLevel}]</span>
+    <span class="banner-card-bg">${cards.length} cards</span>
+    ${colorId.map(c => `<div class="pip pip-${c}"></div>`).join('')}
+    <span style="font-size:11px;color:rgba(255,255,255,0.4);">${guild}${state.theme ? ' · ' + state.theme : ''}</span>`;
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.deck-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+  const tabBtns = document.querySelectorAll('.deck-tab');
+  const tabMap = ['cards','recs','combos','mana','stats','chat'];
+  const idx = tabMap.indexOf(tab);
+  if (tabBtns[idx]) tabBtns[idx].classList.add('active');
+  document.getElementById(`pane-${tab}`).classList.add('active');
+}
+
+function setView(v) {
+  state.currentView = v;
+  document.getElementById('vbGrid').classList.toggle('active', v === 'grid');
+  document.getElementById('vbText').classList.toggle('active', v === 'text');
+  renderCardsTab();
+}
+
+function filterCards() { renderCardsTab(); }
+
+function renderCardsTab() {
+  if (!state.deckAnalysed && state.cards.length === 0) return;
+  const body = document.getElementById('cardsBody');
+  const search = (document.getElementById('cardSearch')?.value || '').toLowerCase();
+  const groupBy = document.getElementById('groupBy')?.value || 'type';
+  const sortBy = document.getElementById('sortBy')?.value || 'name';
+  const cards = state.cards.filter(c => !search || c.toLowerCase().includes(search));
+  const groups = groupCards(cards, groupBy, sortBy);
+  const isGrid = state.currentView === 'grid';
+  let html = '';
+  for (const [label, groupCards2] of Object.entries(groups)) {
+    if (groupCards2.length === 0) continue;
+    const totalPrice = groupCards2.reduce((sum, c) => sum + parseFloat(state.cardData[c.toLowerCase()]?.prices?.usd || 0), 0);
+    html += `<div class="type-section">
+      <div class="type-header">
+        <span class="type-name">${label}</span>
+        <span class="type-count-badge">${groupCards2.length}</span>
+        ${totalPrice > 0 ? `<span class="type-price">$${totalPrice.toFixed(2)}</span>` : ''}
+      </div>`;
+    if (isGrid) {
+      html += `<div class="card-grid">`;
+      groupCards2.forEach(name => {
+        const d = state.cardData[name.toLowerCase()];
+        const owned = state.collection.has(name.toLowerCase());
+        const imgUrl = d?.image_uris?.normal || '';
+        html += `<div class="mtg-card" onclick="openCardModal('${name.replace(/'/g, "\\'")}')">
+          ${imgUrl ? `<img src="${imgUrl}" alt="${name}" loading="lazy">` : `<div class="mtg-card-name-fallback">${name}</div>`}
+          ${!imgUrl ? `<div class="mtg-card-bottom">${name}</div>` : ''}
+          ${owned ? '<div class="own-dot"></div>' : ''}
+        </div>`;
+      });
+      html += `</div>`;
+    } else {
+      html += `<div class="text-list">`;
+      groupCards2.forEach(name => {
+        const d = state.cardData[name.toLowerCase()];
+        const owned = state.collection.has(name.toLowerCase());
+        html += `<div class="text-item" onclick="openCardModal('${name.replace(/'/g, "\\'")}')">
+          ${owned ? '<div class="own-dot" style="position:static;flex-shrink:0;"></div>' : '<div style="width:7px;"></div>'}
+          <span class="text-item-name">${name}</span>
+          <span class="text-item-type">${d?.type_line?.split('—')[0]?.trim() || ''}</span>
+          <span class="text-item-cmc">${d?.cmc > 0 ? d.cmc : ''}</span>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  body.innerHTML = html || '<div class="empty-state"><div class="empty-title">No cards found</div></div>';
+}
+
+function groupCards(cards, groupBy, sortBy) {
+  const sorted = [...cards].sort((a, b) => {
+    if (sortBy === 'cmc') return (state.cardData[a.toLowerCase()]?.cmc || 0) - (state.cardData[b.toLowerCase()]?.cmc || 0);
+    return a.localeCompare(b);
+  });
+  const groups = {};
+  sorted.forEach(name => {
+    const d = state.cardData[name.toLowerCase()];
+    let key = 'Other';
+    if (groupBy === 'type') {
+      const t = d?.type_line || '';
+      if (name === state.cards[0]) key = 'Commander';
+      else if (t.includes('Creature')) key = 'Creatures';
+      else if (t.includes('Instant')) key = 'Instants';
+      else if (t.includes('Sorcery')) key = 'Sorceries';
+      else if (t.includes('Artifact')) key = 'Artifacts';
+      else if (t.includes('Enchantment')) key = 'Enchantments';
+      else if (t.includes('Planeswalker')) key = 'Planeswalkers';
+      else if (t.includes('Land') || TM.isLand(name, state.cardData)) key = 'Lands';
+      else key = 'Other';
+    } else if (groupBy === 'color') {
+      const ci = d?.color_identity || [];
+      key = ci.length === 0 ? 'Colourless' : ci.map(c => TM.COLOR_NAMES[c]).join('/');
+    } else if (groupBy === 'cmc') {
+      const cmc = d?.cmc || 0;
+      key = cmc >= 6 ? '6+' : String(cmc);
+    }
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(name);
+  });
+  const order = ['Commander','Creatures','Planeswalkers','Instants','Sorceries','Artifacts','Enchantments','Lands','Other'];
+  const result = {};
+  order.forEach(k => { if (groups[k]) result[k] = groups[k]; });
+  Object.keys(groups).forEach(k => { if (!result[k]) result[k] = groups[k]; });
+  return result;
+}
+
+function openCardModal(name) {
+  const d = state.cardData[name.toLowerCase()];
+  document.getElementById('cmName').textContent = d?.name || name;
+  document.getElementById('cmCost').textContent = d?.mana_cost ? `Mana cost: ${d.mana_cost}` : '';
+  document.getElementById('cmType').textContent = d?.type_line || '';
+  document.getElementById('cmText').textContent = (d?.oracle_text || '').replace(/ \/\/ /g, '\n\n— Back face —\n\n');
+  document.getElementById('cmPt').textContent = d?.power ? `${d.power} / ${d.toughness}` : '';
+  document.getElementById('cmSet').textContent = d?.set_name || '';
+  const imgUrl = d?.image_uris?.normal || '';
+  const img = document.getElementById('cmImg');
+  const fallback = document.getElementById('cmImgFallback');
+  if (imgUrl) { img.src = imgUrl; img.style.display = 'block'; fallback.style.display = 'none'; }
+  else { img.style.display = 'none'; fallback.style.display = 'flex'; fallback.textContent = name; }
+  document.getElementById('cardModal').classList.add('open');
+}
+
+function closeCardModal() { document.getElementById('cardModal').classList.remove('open'); }
+document.getElementById('cardModal').addEventListener('click', e => { if (e.target === document.getElementById('cardModal')) closeCardModal(); });
+
+function renderStats() {
+  const cards = state.cards;
+  const nonLands = cards.filter(c => !TM.isLand(c, state.cardData));
+  const lands = cards.filter(c => TM.isLand(c, state.cardData));
+  const creatures = nonLands.filter(c => state.cardData[c.toLowerCase()]?.type_line?.includes('Creature'));
+  const cmcs = nonLands.map(c => state.cardData[c.toLowerCase()]?.cmc || 0).filter(n => n > 0);
+  const avgCmc = cmcs.length > 0 ? (cmcs.reduce((a,b) => a+b, 0) / cmcs.length).toFixed(1) : '—';
+  const rampKeywords = ['sol ring','arcane signet','chromatic lantern','mind stone','talisman','signet','cultivate','kodama','rampant','farseek','commander\'s sphere'];
+  const ramp = nonLands.filter(c => rampKeywords.some(k => c.toLowerCase().includes(k)));
+  const drawKeywords = ['draw','loot','wheel','windfall','search','ponder','preordain','brainstorm','faithless'];
+  const draw = nonLands.filter(c => drawKeywords.some(k => (state.cardData[c.toLowerCase()]?.oracle_text || c).toLowerCase().includes(k)));
+  const interactionKeywords = ['destroy','exile','counter','remove','terminate','swords','path','beast within','chaos warp'];
+  const interaction = nonLands.filter(c => interactionKeywords.some(k => (state.cardData[c.toLowerCase()]?.oracle_text || c).toLowerCase().includes(k)));
+  const discardKeywords = ['discard','connive','looting','faithless','rummage'];
+  const discardOutlets = nonLands.filter(c => discardKeywords.some(k => (state.cardData[c.toLowerCase()]?.oracle_text || c).toLowerCase().includes(k)));
+
+  const curveData = [0,0,0,0,0,0,0];
+  const curveSpells = [0,0,0,0,0,0,0];
+  nonLands.forEach(c => {
+    const d = state.cardData[c.toLowerCase()];
+    const idx = Math.min(6, Math.floor(d?.cmc || 0));
+    curveData[idx]++;
+    if (!d?.type_line?.includes('Creature') && !d?.type_line?.includes('Artifact') && !d?.type_line?.includes('Enchantment') && !d?.type_line?.includes('Planeswalker')) curveSpells[idx]++;
+  });
+  const maxCurve = Math.max(...curveData, 1);
+  const typeCount = { Creatures: creatures.length, Sorceries: 0, Instants: 0, Artifacts: 0, Enchantments: 0, Lands: lands.length };
+  nonLands.forEach(c => {
+    const t = state.cardData[c.toLowerCase()]?.type_line || '';
+    if (t.includes('Sorcery')) typeCount.Sorceries++;
+    else if (t.includes('Instant')) typeCount.Instants++;
+    else if (t.includes('Artifact') && !t.includes('Creature')) typeCount.Artifacts++;
+    else if (t.includes('Enchantment') && !t.includes('Creature')) typeCount.Enchantments++;
+  });
+  const maxType = Math.max(...Object.values(typeCount), 1);
+
+  function statCard(label, value, sub, subClass, link) {
+    return `<div class="stat-card">
+      <div class="stat-label">${label}</div>
+      <div class="stat-value">${value}</div>
+      <div class="stat-sub ${subClass || ''}">${sub}</div>
+      ${link ? `<a class="stat-link" onclick="switchTab('${link.tab}')">${link.label} →</a>` : ''}
+    </div>`;
+  }
+
+  const body = document.getElementById('statsBody');
+  body.innerHTML = `
+    <div style="padding:20px 24px 0;">
+      <div class="stat-grid" style="margin-bottom:16px;">
+        ${statCard('Total cards', cards.length, cards.length !== 100 ? `${cards.length > 100 ? cards.length - 100 + ' over' : 100 - cards.length + ' under'} 100` : '✓ Exactly 100', cards.length !== 100 ? 'stat-warn' : 'stat-ok')}
+        ${statCard('Average CMC', avgCmc, 'excl. lands', '')}
+        ${statCard('Lands', lands.length, lands.length < 36 ? `↓ Low (aim 36-38)` : lands.length > 38 ? '↑ Consider cutting' : '✓ Good range', lands.length < 36 ? 'stat-warn' : 'stat-ok', lands.length < 36 ? {tab:'mana', label:'Fix mana base'} : null)}
+        ${statCard('Ramp pieces', ramp.length, ramp.length < 8 ? '↓ Low (aim 8-12)' : '✓ Healthy', ramp.length < 8 ? 'stat-warn' : 'stat-ok', ramp.length < 8 ? {tab:'recs', label:'See ramp recommendations'} : null)}
+        ${statCard('Draw / loot', draw.length, draw.length < 8 ? '↓ Low (aim 8+)' : '✓ Healthy', draw.length < 8 ? 'stat-warn' : 'stat-ok', draw.length < 8 ? {tab:'recs', label:'See draw recommendations'} : null)}
+        ${statCard('Interaction', interaction.length, interaction.length < 6 ? '↓ Low (aim 6+)' : '✓ Healthy', interaction.length < 6 ? 'stat-warn' : 'stat-ok')}
+        ${statCard('Discard outlets', discardOutlets.length, 'Core engine pieces', '')}
+        ${statCard('Creatures', creatures.length, `of ${nonLands.length} non-lands`, '')}
+      </div>
+    </div>
+    <div style="padding:0 24px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="chart-section">
+        <div class="chart-section-title">Mana curve</div>
+        <div class="curve-bars">
+          ${curveData.map((count, i) => {
+            const h = Math.max(4, Math.round((count / maxCurve) * 72));
+            const spells = curveSpells[i];
+            const perms = count - spells;
+            return `<div class="curve-col">
+              <div class="curve-count">${count}</div>
+              <div class="curve-bar-stack" style="height:${h}px;">
+                <div style="flex:${spells};background:var(--pink);border-radius:3px 3px 0 0;min-height:${spells > 0 ? 2 : 0}px;"></div>
+                <div style="flex:${perms};background:var(--orange);min-height:${perms > 0 ? 2 : 0}px;"></div>
+              </div>
+              <div class="curve-label">${['0','1','2','3','4','5','6+'][i]}</div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="legend-row">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--orange);"></div>Permanents</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--pink);"></div>Spells</div>
+        </div>
+      </div>
+      <div class="chart-section">
+        <div class="chart-section-title">Card types</div>
+        ${Object.entries(typeCount).filter(([,v]) => v > 0).map(([k, v]) => `
+          <div class="type-bar-row">
+            <div class="type-bar-label">${k}</div>
+            <div class="type-bar-track">
+              <div class="type-bar-fill" style="width:${(v/maxType*100).toFixed(1)}%;background:${k === 'Creatures' ? 'var(--teal)' : k === 'Lands' ? 'var(--border2)' : 'var(--orange)'};"></div>
+            </div>
+            <div class="type-bar-count">${v}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function renderManaBase() {
+  const cards = state.cards;
+  const lands = cards.filter(c => TM.isLand(c, state.cardData));
+  const nonLands = cards.filter(c => !TM.isLand(c, state.cardData));
+  const tapped = lands.filter(TM.isTappedLand);
+  const untapped = lands.filter(c => !TM.isTappedLand(c));
+  const tappedPct = Math.round((tapped.length / Math.max(lands.length, 1)) * 100);
+  const untappedPct = 100 - tappedPct;
+  const pips = TM.countPips(nonLands, state.cardData);
+  const recSources = TM.recommendedSources(pips, nonLands.length);
+  const actualSources = {};
+  Object.keys(pips).forEach(color => {
+    if (pips[color] === 0) return;
+    const colorLands = lands.filter(c => {
+      const d = state.cardData[c.toLowerCase()];
+      return d?.color_identity?.includes(color) || (color === 'B' && c.toLowerCase().includes('swamp')) || (color === 'U' && c.toLowerCase().includes('island')) || (color === 'R' && c.toLowerCase().includes('mountain')) || (color === 'G' && c.toLowerCase().includes('forest')) || (color === 'W' && c.toLowerCase().includes('plains'));
+    });
+    actualSources[color] = colorLands.length;
+  });
+  let score = 50;
+  if (lands.length >= 36 && lands.length <= 38) score += 20;
+  else if (lands.length >= 33) score += 5;
+  else score -= 10;
+  if (tappedPct < 25) score += 20;
+  else if (tappedPct < 45) score += 8;
+  else score -= 15;
+  score = Math.min(100, Math.max(0, score));
+  const scoreColor = score >= 75 ? 'var(--teal)' : score >= 50 ? 'var(--orange)' : 'var(--pink)';
+  const circ = 163.4;
+  const offset = circ - (score / 100) * circ;
+
+  const totalPips = Object.values(pips).reduce((a,b) => a+b, 0);
+  const pipRows = Object.entries(pips).filter(([,v]) => v > 0).map(([color, count]) => {
+    const pct = Math.round((count / Math.max(totalPips, 1)) * 100);
+    const rec = recSources[color] || 0;
+    const actual = actualSources[color] || 0;
+    const status = actual >= rec ? 'pip-target-ok' : 'pip-target-low';
+    return `<div class="pip-source-row">
+      <div class="pip-source-dot" style="background:${TM.COLOR_HEX[color]};"></div>
+      <div class="pip-source-name">${TM.COLOR_NAMES[color]}</div>
+      <div class="pip-track"><div class="pip-fill" style="width:${pct}%;background:${TM.COLOR_HEX[color]};"></div></div>
+      <div class="pip-nums">
+        <span>${count} pips</span>
+        <span class="${status}">${actual} / ${rec} sources</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  const body = document.getElementById('manaBody');
+  body.innerHTML = `
+    <div class="mana-grid">
+      <div>
+        <div class="mana-card">
+          <div class="mana-card-title">Health score</div>
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+            <div class="health-ring-wrap">
+              <svg width="64" height="64" viewBox="0 0 64 64">
+                <circle cx="32" cy="32" r="26" fill="none" stroke="var(--bg)" stroke-width="6"/>
+                <circle cx="32" cy="32" r="26" fill="none" stroke="${scoreColor}" stroke-width="6" stroke-dasharray="${circ}" stroke-dashoffset="${offset}" stroke-linecap="round" transform="rotate(-90 32 32)"/>
+              </svg>
+              <div class="health-ring-score">${score}</div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--ink3);">Mana base rating</div>
+              <div style="font-size:22px;font-weight:700;color:var(--black);line-height:1;">${score}/100</div>
+              <div style="font-size:11px;color:${scoreColor};margin-top:2px;">${score >= 75 ? 'Strong mana base' : score >= 50 ? 'Decent, room to improve' : 'Needs work'}</div>
+            </div>
+          </div>
+          ${lands.length < 36 ? `<div class="alert alert-warn">Only ${lands.length} lands — aim for 36-38. <a class="stat-link" onclick="switchTab('recs')">See recommendations →</a></div>` : `<div class="alert alert-ok">${lands.length} lands — in the right range.</div>`}
+          ${tappedPct > 40 ? `<div class="alert alert-warn">${tappedPct}% of lands enter tapped — this slows your early game significantly.</div>` : ''}
+        </div>
+        <div class="mana-card">
+          <div class="mana-card-title">Tapped vs untapped</div>
+          <div class="tapped-bar-row">
+            <div class="tapped-label">Untapped</div>
+            <div class="tapped-track"><div class="tapped-fill" style="width:${untappedPct}%;background:var(--teal);"></div></div>
+            <div class="tapped-pct">${untapped.length} (${untappedPct}%)</div>
+          </div>
+          <div class="tapped-bar-row">
+            <div class="tapped-label">Tapped</div>
+            <div class="tapped-track"><div class="tapped-fill" style="width:${tappedPct}%;background:${tappedPct > 40 ? 'var(--orange)' : 'var(--border2)'};"></div></div>
+            <div class="tapped-pct">${tapped.length} (${tappedPct}%)</div>
+          </div>
+          <div style="font-size:11px;color:var(--ink3);margin-top:6px;">Tapped: ${tapped.slice(0,4).map(c=>c.split(',')[0]).join(', ')}${tapped.length > 4 ? ` +${tapped.length - 4} more` : ''}</div>
+        </div>
+        <div class="mana-card">
+          <div class="mana-card-title">Colour pip density</div>
+          <div style="font-size:11px;color:var(--ink3);margin-bottom:10px;">Pips in mana costs → recommended land sources</div>
+          ${pipRows}
+        </div>
+      </div>
+      <div>
+        <div class="mana-card" id="manaRecsCard">
+          <div class="mana-card-title">Lands to add</div>
+          <div style="font-size:11px;color:var(--ink3);"><span class="spinner"></span> Loading AI recommendations...</div>
+        </div>
+        <div class="mana-card" id="manaCutsCard">
+          <div class="mana-card-title">Lands to cut</div>
+          <div style="font-size:11px;color:var(--ink3);">Loading...</div>
+        </div>
+      </div>
+    </div>`;
+  fetchManaRecs(lands, tapped);
+}
+
+async function fetchManaRecs(lands, tappedLands) {
+  try {
+    const prompt = `Analyse this Commander deck's mana base:
+Commander: ${state.cards[0]}
+Colour identity: Grixis (UBR) or based on commander
+Current lands (${lands.length} total): ${lands.join(', ')}
+Tapped lands: ${tappedLands.join(', ')}
+Win condition: ${state.wincon || 'discard/value'}
+
+Return JSON only:
+{"add":[{"name":"Land Name","reason":"one line why"}],"cut":[{"name":"Land Name","reason":"one line why"}]}
+Top 5 adds, top 3 cuts. Prioritise untapped dual lands. Flag if user likely owns it based on being in Doom precon.`;
+    const res = await fetch('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 600,
+        system: 'You are an MTG mana base expert. Return only valid JSON, no markdown.',
+        messages: [{ role: 'user', content: prompt }] }),
+    });
+    const data = await res.json();
+    const raw = data.content?.[0]?.text || '{}';
+    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    const addHtml = (parsed.add || []).map(l => {
+      const owned = state.collection.has(l.name.toLowerCase());
+      return `<div class="land-item"><div><div class="land-name">${l.name}</div><div class="land-reason">${l.reason}</div></div><span class="${owned ? 'badge badge-own' : 'badge badge-buy'}">${owned ? '✓ Own it' : '✗ Buy'}</span></div>`;
+    }).join('');
+    const cutHtml = (parsed.cut || []).map(l => `<div class="land-item"><div><div class="land-name land-name-cut">${l.name}</div><div class="land-reason">${l.reason}</div></div></div>`).join('');
+    document.getElementById('manaRecsCard').innerHTML = `<div class="mana-card-title">Lands to add</div><div class="land-list">${addHtml || '<div style="font-size:12px;color:var(--ink3);">No specific recommendations.</div>'}</div>`;
+    document.getElementById('manaCutsCard').innerHTML = `<div class="mana-card-title">Lands to cut</div><div class="land-list">${cutHtml || '<div style="font-size:12px;color:var(--ink3);">No cuts needed.</div>'}</div>`;
+  } catch (e) {
+    document.getElementById('manaRecsCard').innerHTML = `<div class="mana-card-title">Lands to add</div><div style="font-size:12px;color:var(--ink3);">Couldn't load AI recommendations.</div>`;
+  }
+}
+
+async function runCombos() {
+  const body = document.getElementById('combosBody');
+  body.innerHTML = '<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Checking Commander Spellbook...</div></div>';
+  try {
+    const basics = ['swamp','island','mountain','forest','plains'];
+    const main = [...new Set(state.cards.slice(1).filter(c => !basics.includes(c.toLowerCase())))];
+    const res = await fetch('https://backend.commanderspellbook.com/find-my-combos/', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ commanders: [state.cards[0]], main }),
+    });
+    if (!res.ok) throw new Error('API error');
+    const data = await res.json();
+    const included = (data.results?.included || data.included || []).slice(0, 12);
+    const almost = data.results?.almost_included || data.almost_included || [];
+    const oneAway = almost.filter(c => (c.missingCards || c.missing_cards || []).length === 1).slice(0, 8);
+    const more = almost.filter(c => (c.missingCards || c.missing_cards || []).length > 1).slice(0, 5);
+
+    function getCards(combo) {
+      return (combo.uses || combo.cards || []).map(u => u.card?.name || u.name || '?');
+    }
+    function getResult(combo) {
+      return (combo.produces || []).map(p => p.feature?.name || p.name || p).join(', ') || combo.result || 'Combo result';
+    }
+    function getMissing(combo) {
+      return (combo.missingCards || combo.missing_cards || []).map(c => c.card?.name || c.name || c);
+    }
+    function renderCombo(combo, missing = []) {
+      const cards = getCards(combo);
+      const result = getResult(combo);
+      const inDecks = combo.popularity || '';
+      return `<div class="combo-card">
+        <div class="combo-card-row">
+          ${cards.slice(0,4).map(name => {
+            const isMissing = missing.includes(name);
+            const ownsMissing = isMissing && state.collection.has(name.toLowerCase());
+            const d = state.cardData[name.toLowerCase()];
+            const img = d?.image_uris?.normal || '';
+            return `<div class="combo-mtg-thumb ${isMissing ? (ownsMissing ? 'combo-thumb-owned' : 'combo-thumb-missing') : ''}">
+              <div class="combo-thumb-img">${img ? `<img src="${img}" alt="${name}" style="width:100%;height:100%;object-fit:cover;">` : name}</div>
+              <div class="combo-thumb-name">${name.split(',')[0]}${isMissing ? (ownsMissing ? ' ✓' : ' (missing)') : ''}</div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="margin-top:10px;">
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;">${result.split(',').map(r => `<span class="result-tag">${r.trim()}</span>`).join('')}</div>
+          ${missing.some(m => state.collection.has(m.toLowerCase())) ? `<div class="alert alert-ok" style="margin-bottom:6px;">✓ You own the missing piece — add it to complete this combo.</div>` : ''}
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:0.5px solid var(--bg);">
+            ${inDecks ? `<span style="font-size:11px;color:var(--ink3);">In ${inDecks} decks</span>` : '<span></span>'}
+            <a style="font-size:11px;color:var(--teal);text-decoration:none;cursor:pointer;" href="https://commanderspellbook.com" target="_blank">View on Commander Spellbook ↗</a>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    let html = '';
+    if (included.length > 0) {
+      html += `<div class="combo-section-header"><span class="combo-status cs-complete">Complete</span><span style="font-size:12px;color:var(--ink3);">${included.length} combo${included.length !== 1 ? 's' : ''} in this deck</span></div>`;
+      html += included.map(c => renderCombo(c)).join('');
+    }
+    if (oneAway.length > 0) {
+      html += `<div class="combo-section-header" style="margin-top:20px;"><span class="combo-status cs-one">One card away</span><span style="font-size:12px;color:var(--ink3);">${oneAway.length} combo${oneAway.length !== 1 ? 's' : ''} within reach</span></div>`;
+      html += oneAway.map(c => renderCombo(c, getMissing(c))).join('');
+    }
+    if (more.length > 0) {
+      html += `<div class="combo-section-header" style="margin-top:20px;"><span class="combo-status cs-more">Worth knowing about</span><span style="font-size:12px;color:var(--ink3);">${more.length} partial combo${more.length !== 1 ? 's' : ''}</span></div>`;
+      html += more.map(c => renderCombo(c, getMissing(c))).join('');
+    }
+    if (!html) html = '<div class="empty-state"><div class="empty-title">No combos found</div><div class="empty-sub">This deck has no known combo lines in Commander Spellbook.</div></div>';
+    body.innerHTML = `<div style="padding:20px 24px;">${html}</div>`;
+  } catch (e) {
+    body.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load combos</div><div class="empty-sub">${e.message}</div></div>`;
+  }
+}
+
+async function runRecommendations() {
+  const container = document.getElementById('recsContent');
+  container.innerHTML = '<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Fetching recommendations...</div></div>';
+  try {
+    const recRes = await fetch('https://api.recommander.cards/public-release/api/decks/recommend/top', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ card_format: 'name', commander: state.cards[0], partner: null, deck: state.cards.slice(1) }),
+    });
+    let recs = [];
+    if (recRes.ok) { const d = await recRes.json(); recs = (d.data?.recommendations || []).slice(0, 20); }
+    const prompt = `Commander deck: "${state.cards[0]}"
+Win condition: ${state.wincon || 'discard/value/ping with Syr Konrad'}
+Theme: ${state.theme || 'none'}
+Power level: ${state.powerLevel}/5
+Current deck: ${state.cards.slice(0, 30).join(', ')}
+Recommander suggestions: ${recs.map(r => r.name).join(', ')}
+
+Pick top 8 best cards. Then pick up to 6 themed alternatives${state.theme ? ` for theme: ${state.theme}` : ''}.
+Return JSON only:
+{"best":[{"name":"Card","reason":"one sentence","cmc":"2","type":"Creature"}],"themed":[{"name":"Card","reason":"one sentence","trade_off":"brief note"}]}`;
+    const aiRes = await fetch('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000,
+        system: 'You are an MTG deck advisor. Return only valid JSON, no markdown.',
+        messages: [{ role: 'user', content: prompt }] }),
+    });
+    const aiData = await aiRes.json();
+    const raw = aiData.content?.[0]?.text || '{}';
+    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    function recCard(r, themed = false) {
+      const owned = state.collection.has(r.name.toLowerCase());
+      const d = state.cardData[r.name.toLowerCase()];
+      const img = d?.image_uris?.small || '';
+      return `<div class="rec-card">
+        <div class="rec-thumb">${img ? `<img src="${img}" alt="${r.name}">` : r.name.split(',')[0]}</div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;color:var(--black);margin-bottom:3px;">${r.name}</div>
+          <div style="font-size:11px;color:var(--ink3);line-height:1.4;margin-bottom:5px;">${r.reason}</div>
+          ${themed && r.trade_off ? `<div style="font-size:10px;color:var(--ink4);font-style:italic;margin-bottom:4px;">${r.trade_off}</div>` : ''}
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">
+            <span class="${owned ? 'badge badge-own' : 'badge badge-buy'}">${owned ? '✓ Own it' : state.collection.size > 0 ? '✗ Need to buy' : 'Collection?'}</span>
+            ${r.cmc && r.cmc !== '?' ? `<span class="badge badge-neutral">CMC ${r.cmc}</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }
+    container.innerHTML = `
+      <div style="padding:20px 24px;">
+        <div class="rec-layout">
+          <div>
+            <div class="rec-col-header">Best cards <span class="badge badge-bracket" style="font-size:10px;">Performance</span></div>
+            ${(parsed.best || []).map(r => recCard(r, false)).join('') || '<div style="color:var(--ink3);font-size:13px;">No recommendations found.</div>'}
+          </div>
+          <div>
+            <div class="rec-col-header">Themed alternatives <span class="badge badge-teal" style="font-size:10px;">Flavour</span></div>
+            ${(parsed.themed || []).length > 0
+              ? (parsed.themed || []).map(r => recCard(r, true)).join('')
+              : `<div style="color:var(--ink3);font-size:13px;line-height:1.5;">${state.theme ? 'No themed alternatives found. Try asking Urza for specific suggestions.' : 'Set a theme in your deck to see themed alternatives here.'}</div>`}
+          </div>
+        </div>
+      </div>`;
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load recommendations</div><div class="empty-sub">${e.message}</div></div>`;
+  }
+}
+
+const SYSTEM_PROMPT = `You are Urza, an expert Magic: The Gathering Commander deck advisor inside The Mulligan. You are knowledgeable, direct, and slightly dry in tone. You know this deck thoroughly from the context provided.
+
+HOW TO RESPOND:
+- Lead with the direct answer, concise and clear
+- When recommending a swap, always say what to cut and why — never just what to add
+- For themed alternatives, show best card vs best themed card side by side
+- For combo lines, explain step by step in plain language
+- For mana base, analyse land count, tapped/untapped ratio, colour sources
+- If collection data is available, flag owned cards with ✓ and unowned with ✗
+
+TONE: Direct, smart, slightly casual. Australian English. No corporate language. No excessive enthusiasm.`;
+
+function buildContext() {
+  const cardContext = Object.values(state.cardData).slice(0, 60).map(c => `${c.name} [${c.mana_cost || '0'}] ${c.type_line}: ${(c.oracle_text || '').slice(0, 100)}`).join('\n');
+  return `${SYSTEM_PROMPT}
+
+DECK CONTEXT:
+Commander: ${state.cards[0]}
+Full decklist: ${state.cards.join(', ')}
+Win condition: ${state.wincon || 'Unknown'}
+Theme: ${state.theme || 'None'}
+Power level: ${state.powerLevel}/5
+Collection loaded: ${state.collection.size > 0 ? 'Yes — ' + state.collection.size + ' cards' : 'No'}
+
+CARD ORACLE TEXT:
+${cardContext}`;
+}
+
+async function startChat() {
+  const context = buildContext();
+  const prompt = `${context}\n\nPlease introduce yourself briefly, confirm you have read the deck, and ask the three intake questions about: (1) win condition — noting it's fine if they don't know, (2) theme and how strictly to stick to it, (3) power level on a 1-5 scale.`;
+  state.chatHistory = [{ role: 'user', content: prompt }];
+  document.getElementById('chatContext').innerHTML = `<strong>Commander:</strong> ${state.cards[0]}<br><strong>Cards:</strong> ${state.cards.length}<br><strong>Win-con:</strong> ${state.wincon || 'Not set'}<br><strong>Theme:</strong> ${state.theme || 'Not set'}`;
+  const typingId = addChatTyping();
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system: SYSTEM_PROMPT, messages: state.chatHistory }),
+    });
+    removeChatTyping(typingId);
+    const data = await res.json();
+    const reply = data.content?.[0]?.text || 'Something went wrong.';
+    addChatMsg('assistant', reply);
+    state.chatHistory.push({ role: 'assistant', content: reply });
+  } catch (e) {
+    removeChatTyping(typingId);
+    addChatMsg('assistant', `Couldn't connect to the API. Error: ${e.message}`);
+  }
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  input.style.height = 'auto';
+  addChatMsg('user', text);
+  const context = buildContext();
+  state.chatHistory.push({ role: 'user', content: text });
+  const typingId = addChatTyping();
+  document.querySelector('.chat-input-row .btn').disabled = true;
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system: context, messages: state.chatHistory }),
+    });
+    removeChatTyping(typingId);
+    const data = await res.json();
+    const reply = data.content?.[0]?.text || 'Something went wrong.';
+    addChatMsg('assistant', reply);
+    state.chatHistory.push({ role: 'assistant', content: reply });
+  } catch (e) {
+    removeChatTyping(typingId);
+    addChatMsg('assistant', `Error: ${e.message}`);
+  }
+  document.querySelector('.chat-input-row .btn').disabled = false;
+}
+
+function quickChat(text) {
+  document.getElementById('chatInput').value = text;
+  switchTab('chat');
+  sendChat();
+}
+
+function addChatMsg(role, text) {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:8px;' + (role === 'user' ? 'align-self:flex-end;flex-direction:row-reverse;' : '');
+  const av = role === 'assistant' ? 'U' : (session.user.email?.[0] || 'Y').toUpperCase();
+  const avBg = role === 'assistant' ? 'var(--teal)' : 'var(--ink4)';
+  const avColor = role === 'assistant' ? '#fff' : 'var(--ink)';
+  const bubbleBg = role === 'user' ? 'var(--black)' : 'var(--bg)';
+  const bubbleColor = role === 'user' ? '#fff' : 'var(--ink)';
+  const bubbleBorder = role === 'user' ? 'var(--black)' : 'var(--border)';
+  div.innerHTML = `
+    <div style="width:26px;height:26px;border-radius:50%;background:${avBg};color:${avColor};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;margin-top:2px;">${av}</div>
+    <div style="background:${bubbleBg};border:0.5px solid ${bubbleBorder};border-radius:10px;padding:10px 14px;font-size:12px;line-height:1.6;color:${bubbleColor};max-width:85%;">${formatChat(text)}</div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function formatChat(text) {
+  return '<p>' + text.replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--teal);">$1</strong>').replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+}
+
+function addChatTyping() {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.id = 'chat-typing-' + Date.now();
+  div.style.cssText = 'display:flex;gap:8px;';
+  div.innerHTML = `<div style="width:26px;height:26px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">U</div><div style="background:var(--bg);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;"><div class="typing-dots"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div.id;
+}
+
+function removeChatTyping(id) { document.getElementById(id)?.remove(); }
+
+function handleChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+async function shareDeck() {
+  const url = window.location.href;
+  try {
+    await navigator.clipboard.writeText(url);
+    const btn = document.querySelector('.deck-banner .btn-ghost');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 2000);
+  } catch {}
+}
+
+init();
+</script>
+</body>
+</html>

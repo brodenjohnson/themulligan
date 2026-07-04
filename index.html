@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Mulligan — Your decks</title>
+<link rel="stylesheet" href="/shared.css">
+<style>
+  .main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+  .page-title { font-size: 20px; font-weight: 700; color: var(--black); }
+  .page-sub { font-size: 13px; color: var(--ink3); margin-top: 3px; }
+  .deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+  .deck-card { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; transition: border-color 0.15s, transform 0.1s; text-decoration: none; display: block; }
+  .deck-card:hover { border-color: var(--teal); transform: translateY(-1px); }
+  .deck-art { height: 100px; background: var(--black); position: relative; overflow: hidden; }
+  .deck-art-gradient { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.55) 100%); }
+  .deck-bracket { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.7); color: var(--orange); font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; border: 0.5px solid rgba(245,166,35,0.3); }
+  .deck-pips-corner { position: absolute; top: 8px; right: 8px; display: flex; gap: 3px; }
+  .deck-info { padding: 10px 12px 12px; }
+  .deck-name { font-size: 13px; font-weight: 600; color: var(--black); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .deck-meta { font-size: 11px; color: var(--ink3); }
+  .deck-theme { font-size: 11px; color: var(--teal); margin-top: 4px; }
+  .new-deck-card { background: var(--card); border: 1px dashed var(--border2); border-radius: var(--radius-lg); height: 170px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: border-color 0.15s, background 0.15s; color: var(--ink3); gap: 8px; }
+  .new-deck-card:hover { border-color: var(--teal); background: rgba(0,212,204,0.03); color: var(--teal); }
+  .new-deck-icon { font-size: 24px; }
+  .new-deck-label { font-size: 13px; font-weight: 500; }
+  .section-label { font-size: 11px; font-weight: 600; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; margin-top: 24px; }
+  .section-label:first-child { margin-top: 0; }
+  .loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+  .skeleton { background: var(--border); border-radius: var(--radius-lg); height: 170px; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+  .collection-bar { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
+  .coll-left { display: flex; align-items: center; gap: 12px; }
+  .coll-icon { width: 36px; height: 36px; border-radius: var(--radius); background: rgba(0,212,204,0.1); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .coll-title { font-size: 13px; font-weight: 600; color: var(--black); }
+  .coll-sub { font-size: 12px; color: var(--ink3); }
+  .delete-btn { background: none; border: none; color: var(--ink4); cursor: pointer; font-size: 16px; padding: 4px; border-radius: 4px; transition: color 0.1s; }
+  .delete-btn:hover { color: var(--pink); }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="/" class="logo-wrap">
+    <div>
+      <div class="logo-text"><span class="the">the</span> Mulligan</div>
+    </div>
+    <div class="logo-dashes"><div class="ld ld1"></div><div class="ld ld2"></div><div class="ld ld3"></div></div>
+  </a>
+  <div class="topbar-nav">
+    <a href="/" class="nav-link active">Your decks</a>
+    <a href="/collection" class="nav-link">Collection</a>
+  </div>
+  <div class="topbar-right">
+    <span id="userEmail" style="font-size:12px;color:var(--ink3);"></span>
+    <div class="avatar" id="userAvatar" onclick="TM.signOut()">B</div>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Your decks</div>
+      <div class="page-sub" id="deckSubtitle">Loading...</div>
+    </div>
+    <button class="btn btn-primary" onclick="openNewDeckModal()">
+      <i class="ti ti-plus" aria-hidden="true" style="font-size:14px;"></i> New deck
+    </button>
+  </div>
+
+  <div id="collectionBar" style="display:none;" class="collection-bar">
+    <div class="coll-left">
+      <div class="coll-icon">📦</div>
+      <div>
+        <div class="coll-title" id="collTitle">Collection not loaded</div>
+        <div class="coll-sub" id="collSub">Upload your collection to see ownership flags on recommendations</div>
+      </div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="openCollectionModal()">
+      <i class="ti ti-upload" aria-hidden="true"></i> Upload collection
+    </button>
+  </div>
+
+  <div id="loadingState" class="loading-grid">
+    <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+  </div>
+
+  <div id="decksContainer" style="display:none;">
+    <div class="section-label">Recently updated</div>
+    <div class="deck-grid" id="deckGrid"></div>
+  </div>
+</div>
+
+<!-- NEW DECK MODAL -->
+<div class="modal-overlay" id="newDeckModal">
+  <div class="modal">
+    <div class="modal-title">New deck</div>
+    <div class="field" style="margin-bottom:12px;">
+      <label style="display:block;font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:5px;">Deck name</label>
+      <input type="text" id="newDeckName" placeholder="e.g. Norman Osborn" style="width:100%;">
+    </div>
+    <div class="field" style="margin-bottom:16px;">
+      <label style="display:block;font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:5px;">Decklist</label>
+      <textarea id="newDeckList" rows="10" placeholder="Paste your decklist here, one card per line.&#10;&#10;The first card is treated as your commander.&#10;&#10;Formats accepted:&#10;Norman Osborn&#10;1 Syr Konrad, the Grim&#10;Faithless Looting" style="width:100%;font-family:monospace;font-size:12px;line-height:1.6;"></textarea>
+      <div id="newDeckCardCount" style="font-size:11px;color:var(--ink3);margin-top:4px;"></div>
+    </div>
+    <div id="newDeckError" style="display:none;" class="alert alert-error" style="margin-bottom:12px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeNewDeckModal()">Cancel</button>
+      <button class="btn btn-primary" id="saveDeckBtn" onclick="saveNewDeck()">Save deck</button>
+    </div>
+  </div>
+</div>
+
+<!-- COLLECTION MODAL -->
+<div class="modal-overlay" id="collectionModal">
+  <div class="modal">
+    <div class="modal-title">Upload collection</div>
+    <p style="font-size:13px;color:var(--ink3);margin-bottom:16px;">Export from Mythic Tools, Moxfield, or any MTG app as CSV or text. One card name per line.</p>
+    <div style="margin-bottom:12px;">
+      <label style="display:block;font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:5px;">Upload file</label>
+      <input type="file" id="collFile" accept=".csv,.txt" style="width:100%;" onchange="handleCollFile(event)">
+    </div>
+    <div style="text-align:center;color:var(--ink4);font-size:12px;margin:8px 0;">or paste below</div>
+    <textarea id="collPaste" rows="8" placeholder="Card Name&#10;Card Name&#10;..." style="width:100%;font-family:monospace;font-size:12px;margin-bottom:12px;"></textarea>
+    <div id="collStatus" style="font-size:12px;color:var(--ink3);margin-bottom:12px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeCollectionModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCollectionData()">Save collection</button>
+    </div>
+  </div>
+</div>
+
+<div class="urza-fab">
+  <button class="urza-pill" onclick="openUrza()">
+    <div class="urza-dot"></div> Ask Urza
+  </button>
+</div>
+
+<div class="urza-panel" id="urzaPanel">
+  <div class="urza-panel-header">
+    <div class="urza-panel-title"><div class="urza-dot"></div> Urza</div>
+    <button class="urza-panel-close" onclick="closeUrza()">×</button>
+  </div>
+  <div class="urza-messages" id="urzaMessages">
+    <div class="urza-msg">
+      <div class="urza-avatar">U</div>
+      <div class="urza-bubble"><p>Hi. I'm Urza — your deck advisor. Open a deck to get specific advice, or ask me anything about Commander.</p></div>
+    </div>
+  </div>
+  <div class="urza-input-row">
+    <textarea class="urza-input" id="urzaInput" placeholder="Ask anything..." rows="1" onkeydown="handleUrzaKey(event)" oninput="autoResize(this)"></textarea>
+    <button class="urza-send" onclick="sendUrza()">↑</button>
+  </div>
+</div>
+
+<script src="/shared.js"></script>
+<script>
+const session = TM.requireAuth();
+if (!session) throw new Error('redirect');
+
+document.getElementById('userAvatar').textContent = (session.user.email?.[0] || 'U').toUpperCase();
+document.getElementById('userEmail').textContent = session.user.email;
+
+let collectionCards = [];
+let parsedCollection = new Set();
+
+async function init() {
+  try {
+    const [decks, collection] = await Promise.all([TM.getDecks(), TM.getCollection()]);
+    collectionCards = collection || [];
+    parsedCollection = new Set(collectionCards.map(c => c.toLowerCase()));
+    renderDecks(decks);
+    renderCollectionBar(collectionCards.length);
+  } catch (e) {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('decksContainer').style.display = 'block';
+    document.getElementById('deckSubtitle').textContent = 'Could not load decks.';
+  }
+}
+
+function renderDecks(decks) {
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('decksContainer').style.display = 'block';
+  document.getElementById('deckSubtitle').textContent = `${decks.length} deck${decks.length !== 1 ? 's' : ''}`;
+  document.getElementById('collectionBar').style.display = 'flex';
+  const grid = document.getElementById('deckGrid');
+  grid.innerHTML = '';
+  decks.forEach(deck => {
+    const cards = TM.parseDeckList(deck.cardlist || '');
+    const commander = cards[0] || deck.commander || 'Unknown';
+    const colorId = deck.color_identity ? JSON.parse(deck.color_identity) : ['U','B','R'];
+    const guildName = TM.getGuildName(colorId);
+    const div = document.createElement('a');
+    div.className = 'deck-card';
+    div.href = `/deck/${deck.id}`;
+    const artColor = getArtColor(colorId);
+    div.innerHTML = `
+      <div class="deck-art" style="background:${artColor};">
+        <div class="deck-art-gradient"></div>
+        <div class="deck-bracket">[${deck.power_level || 3}]</div>
+        <div class="deck-pips-corner">${colorId.map(c => `<div class="pip pip-${c}"></div>`).join('')}</div>
+      </div>
+      <div class="deck-info">
+        <div class="deck-name">${commander}</div>
+        <div class="deck-meta">${cards.length} cards · ${guildName || colorId.map(c => TM.COLOR_NAMES[c]).join('/')}</div>
+        ${deck.theme ? `<div class="deck-theme">${deck.theme}</div>` : ''}
+      </div>`;
+    grid.appendChild(div);
+  });
+  const addCard = document.createElement('div');
+  addCard.className = 'new-deck-card';
+  addCard.onclick = openNewDeckModal;
+  addCard.innerHTML = `<div class="new-deck-icon"><i class="ti ti-plus" aria-hidden="true"></i></div><div class="new-deck-label">Add deck</div>`;
+  grid.appendChild(addCard);
+}
+
+function getArtColor(colorId) {
+  const maps = { W:'#2a2a1a', U:'#0a1828', B:'#1a0828', R:'#280a0a', G:'#0a1a0a' };
+  if (colorId.length === 0) return '#1a1a1a';
+  if (colorId.length === 1) return maps[colorId[0]] || '#1a1a1a';
+  return '#1a1a1a';
+}
+
+function renderCollectionBar(count) {
+  if (count > 0) {
+    document.getElementById('collTitle').textContent = `${count.toLocaleString()} cards in collection`;
+    document.getElementById('collSub').textContent = 'Ownership flags active on all recommendations';
+  } else {
+    document.getElementById('collTitle').textContent = 'No collection loaded';
+    document.getElementById('collSub').textContent = 'Upload your collection to see ownership flags on recommendations';
+  }
+}
+
+function openNewDeckModal() {
+  document.getElementById('newDeckModal').classList.add('open');
+  document.getElementById('newDeckName').focus();
+}
+
+function closeNewDeckModal() {
+  document.getElementById('newDeckModal').classList.remove('open');
+  document.getElementById('newDeckList').value = '';
+  document.getElementById('newDeckName').value = '';
+  document.getElementById('newDeckCardCount').textContent = '';
+  document.getElementById('newDeckError').style.display = 'none';
+}
+
+document.getElementById('newDeckList').addEventListener('input', () => {
+  const text = document.getElementById('newDeckList').value;
+  const cards = TM.parseDeckList(text);
+  document.getElementById('newDeckCardCount').textContent = cards.length > 0 ? `${cards.length} cards detected · Commander: ${cards[0]}` : '';
+});
+
+async function saveNewDeck() {
+  const name = document.getElementById('newDeckName').value.trim();
+  const list = document.getElementById('newDeckList').value.trim();
+  const errEl = document.getElementById('newDeckError');
+  errEl.style.display = 'none';
+  if (!list) { errEl.textContent = 'Paste a decklist.'; errEl.style.display = 'block'; return; }
+  const cards = TM.parseDeckList(list);
+  if (cards.length === 0) { errEl.textContent = 'No cards detected.'; errEl.style.display = 'block'; return; }
+  const commander = cards[0];
+  const deckName = name || commander;
+  const btn = document.getElementById('saveDeckBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const id = await TM.saveDeck({ name: deckName, commander, cardlist: list, power_level: 3 });
+    closeNewDeckModal();
+    window.location.href = `/deck/${id}`;
+  } catch (e) {
+    errEl.textContent = e.message || 'Failed to save.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Save deck';
+  }
+}
+
+function openCollectionModal() {
+  document.getElementById('collectionModal').classList.add('open');
+}
+
+function closeCollectionModal() {
+  document.getElementById('collectionModal').classList.remove('open');
+}
+
+function handleCollFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('collPaste').value = e.target.result;
+    const cards = TM.parseCollection(e.target.result);
+    document.getElementById('collStatus').textContent = `${cards.length} cards detected`;
+  };
+  reader.readAsText(file);
+}
+
+async function saveCollectionData() {
+  const text = document.getElementById('collPaste').value.trim();
+  if (!text) return;
+  const cards = TM.parseCollection(text);
+  await TM.saveCollection(cards);
+  parsedCollection = new Set(cards);
+  renderCollectionBar(cards.length);
+  closeCollectionModal();
+}
+
+document.addEventListener('click', e => {
+  if (e.target === document.getElementById('newDeckModal')) closeNewDeckModal();
+  if (e.target === document.getElementById('collectionModal')) closeCollectionModal();
+});
+
+let urzaHistory = [];
+
+function openUrza() { document.getElementById('urzaPanel').classList.add('open'); }
+function closeUrza() { document.getElementById('urzaPanel').classList.remove('open'); }
+
+async function sendUrza() {
+  const input = document.getElementById('urzaInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  input.style.height = 'auto';
+  addUrzaMsg('user', text);
+  urzaHistory.push({ role: 'user', content: text });
+  const typingId = addUrzaTyping();
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        system: 'You are Urza, an expert Magic: The Gathering Commander deck advisor. You are knowledgeable, direct, and slightly dry. Answer questions about MTG rules, cards, deck building, and Commander strategy. Keep responses concise.',
+        messages: urzaHistory,
+      }),
+    });
+    removeUrzaTyping(typingId);
+    const data = await res.json();
+    const reply = data.content?.[0]?.text || 'Something went wrong.';
+    addUrzaMsg('assistant', reply);
+    urzaHistory.push({ role: 'assistant', content: reply });
+  } catch (e) {
+    removeUrzaTyping(typingId);
+    addUrzaMsg('assistant', 'Could not connect. Check your API setup.');
+  }
+}
+
+function addUrzaMsg(role, text) {
+  const container = document.getElementById('urzaMessages');
+  const div = document.createElement('div');
+  div.className = `urza-msg ${role}`;
+  div.innerHTML = `
+    <div class="urza-avatar">${role === 'assistant' ? 'U' : (session.user.email?.[0] || 'Y').toUpperCase()}</div>
+    <div class="urza-bubble">${formatUrzaText(text)}</div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function formatUrzaText(text) {
+  return '<p>' + text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+}
+
+function addUrzaTyping() {
+  const container = document.getElementById('urzaMessages');
+  const div = document.createElement('div');
+  div.className = 'urza-msg';
+  div.id = 'urza-typing-' + Date.now();
+  div.innerHTML = `<div class="urza-avatar">U</div><div class="urza-bubble"><div class="typing-dots"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div.id;
+}
+
+function removeUrzaTyping(id) {
+  document.getElementById(id)?.remove();
+}
+
+function handleUrzaKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendUrza(); }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 80) + 'px';
+}
+
+init();
+</script>
+</body>
+</html>
