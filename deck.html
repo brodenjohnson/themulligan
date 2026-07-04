@@ -357,6 +357,10 @@ async function init() {
     startChat();
   } catch (e) {
     console.error(e);
+    const errBody = document.getElementById('cardsBody');
+    if (errBody) {
+      errBody.innerHTML = '<div class="empty-state"><div class="empty-title" style="color:var(--pink);">Something went wrong loading this deck</div><div class="empty-sub" style="margin-top:10px;font-family:monospace;font-size:11px;text-align:left;background:var(--card);padding:12px;border-radius:8px;border:0.5px solid var(--border);white-space:pre-wrap;">' + ((e && e.message) || String(e)) + (e && e.stack ? '\n\n' + e.stack.split('\n').slice(0,5).join('\n') : '') + '</div></div>';
+    }
   }
 }
 
