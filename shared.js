@@ -224,6 +224,120 @@ async function fetchScryfallBulk(cardNames) {
   return results;
 }
 
+// Extracts { nameLower: { set, collectorNumber } } from a raw decklist paste, so we can
+// later fetch the EXACT printing the person owns (correct artwork) rather than whatever
+// default printing Scryfall's name-only lookup happens to return.
+// Handles lines like: "1x Krenko, Mob Boss (SLD) 2407 *F*" or "Arena of Glory (PLST) MH3-215"
+function extractPrintingHints(rawText) {
+  const hints = {};
+  const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    if (line.startsWith('//') || line.startsWith('#')) continue;
+    let rest = line.replace(/^(\d+)x?\s+/, '');
+    // Match: <name> (SET) <collector-number-ish>  [optional *F*]
+    const m = rest.match(/^(.+?)\s+\(([A-Za-z0-9]{2,6})\)\s+([\w★-]+)\s*(\*F\*)?\s*$/);
+    if (!m) continue;
+    const name = m[1].trim().split(' // ')[0].toLowerCase();
+    const set = m[2].toLowerCase();
+    // Collector number can be a plain number, have a letter suffix (39s), a star (129★), or
+    // be a "SET-NUMBER" style reference for The List reprints (MH3-215) — Scryfall wants just
+    // the plain collector number as it appears on the card, so strip trailing letters/stars
+    // and take the numeric part after any hyphenated set prefix.
+    let collectorNumber = m[3].replace(/[★]/g, '').replace(/^[A-Za-z0-9]+-/, '');
+    hints[name] = { set, collectorNumber };
+  }
+  return hints;
+}
+
+// Fetches exact printings (correct artwork) for cards where we know set + collector number.
+// Returns the same shape as fetchScryfallBulk's result map, keyed by card name (lowercase).
+async function fetchExactPrintings(hints) {
+  const results = {};
+  const entries = Object.entries(hints);
+  for (let i = 0; i < entries.length; i += 75) {
+    const batch = entries.slice(i, i + 75);
+    try {
+      const res = await fetch('https://api.scryfall.com/cards/collection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifiers: batch.map(([, h]) => ({ set: h.set, collector_number: h.collectorNumber })) }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        (data.data || []).forEach(card => {
+          const oracleText = card.card_faces
+            ? card.card_faces.map(f => `${f.name}${f.mana_cost ? ` [${f.mana_cost}]` : ''} ${f.type_line || ''}: ${f.oracle_text || ''}`).join(' // ')
+            : card.oracle_text || '';
+          const cardData = {
+            name: card.name,
+            mana_cost: card.mana_cost || card.card_faces?.[0]?.mana_cost || '',
+            cmc: card.cmc || 0,
+            type_line: card.type_line || card.card_faces?.[0]?.type_line || '',
+            oracle_text: oracleText,
+            colors: card.colors || card.card_faces?.[0]?.colors || [],
+            color_identity: card.color_identity || [],
+            power: card.power || card.card_faces?.[0]?.power || null,
+            toughness: card.toughness || card.card_faces?.[0]?.toughness || null,
+            image_uris: card.image_uris || card.card_faces?.[0]?.image_uris || null,
+            prices: card.prices || {},
+            set_name: card.set_name || '',
+          };
+          const key = card.name.split(' // ')[0].toLowerCase().trim();
+          results[key] = cardData;
+        });
+      }
+    } catch (e) { console.warn('Exact printing lookup batch failed', e); }
+    if (i + 75 < entries.length) await new Promise(r => setTimeout(r, 100));
+  }
+  return results;
+}
+
+// Reconciles a deck's card list against the collection: cards newly added to the deck get
+// pulled from Bulk (if available) and tagged with this deck's name; cards removed from the
+// deck get moved back to Bulk. This is what makes the collection's "In decks" / "Decks
+// tracked" stats actually reflect reality, and what puts a coloured deck tag on each card.
+// Mutates and returns the same collectionRaw array (array of {name, quantity, set, listedIn}).
+function reconcileDeckCollection(oldCardNames, newCardNames, deckName, collectionRaw) {
+  const basics = ['swamp', 'island', 'mountain', 'forest', 'plains'];
+  const normalize = n => (n || '').split(' // ')[0].toLowerCase().trim();
+  const oldFreq = new Map();
+  oldCardNames.forEach(n => { const k = normalize(n); oldFreq.set(k, (oldFreq.get(k) || 0) + 1); });
+  const newFreq = new Map();
+  newCardNames.forEach(n => { const k = normalize(n); newFreq.set(k, (newFreq.get(k) || 0) + 1); });
+  const allKeys = new Set([...oldFreq.keys(), ...newFreq.keys()]);
+  const deckNameLower = (deckName || '').toLowerCase();
+  let pulledFromBulk = 0, returnedToBulk = 0;
+
+  allKeys.forEach(key => {
+    if (basics.includes(key)) return; // basics aren't worth tracking per-copy
+    const oldCount = oldFreq.get(key) || 0;
+    const newCount = newFreq.get(key) || 0;
+    if (newCount > oldCount) {
+      let toPull = newCount - oldCount;
+      for (const item of collectionRaw) {
+        if (toPull === 0) break;
+        if (normalize(item.name) === key && (item.listedIn || 'Bulk').toLowerCase() === 'bulk') {
+          item.listedIn = deckName;
+          toPull--;
+          pulledFromBulk++;
+        }
+      }
+    } else if (oldCount > newCount) {
+      let toReturn = oldCount - newCount;
+      for (const item of collectionRaw) {
+        if (toReturn === 0) break;
+        if (normalize(item.name) === key && (item.listedIn || '').toLowerCase() === deckNameLower) {
+          item.listedIn = 'Bulk';
+          toReturn--;
+          returnedToBulk++;
+        }
+      }
+    }
+  });
+
+  return { collectionRaw, pulledFromBulk, returnedToBulk };
+}
+
 const COLOR_CACHE_KEY = 'mulligan_card_colors_v1';
 
 function getColorCache() {
@@ -522,4 +636,6 @@ window.TM = {
   validateDeckList, validateCollection,
   parseCSVLine, collectionToLookup,
   getColorIdentities, filterByColorIdentity,
+  extractPrintingHints, fetchExactPrintings,
+  reconcileDeckCollection,
 };
