@@ -102,6 +102,15 @@
     .chat-layout { grid-template-columns: 1fr; height: auto; }
     .quick-panel { display: none; }
   }
+  /* SELECTION MODE */
+  .btn-ghost.active { background: var(--black); color: #fff; border-color: var(--black); }
+  .card-selected { outline: 2px solid var(--teal); outline-offset: -2px; }
+  .select-check { position: absolute; top: 6px; left: 6px; width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,0.85); border: 1.5px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--teal); z-index: 2; }
+  .select-check.checked { background: var(--teal); border-color: var(--teal); color: #fff; }
+  .select-check-inline { position: static; flex-shrink: 0; width: 16px; height: 16px; font-size: 10px; }
+  .add-card-suggestion { padding: 8px 12px; font-size: 13px; cursor: pointer; border-bottom: 0.5px solid var(--bg); }
+  .add-card-suggestion:last-child { border-bottom: none; }
+  .add-card-suggestion:hover { background: rgba(0,212,204,0.06); color: var(--teal); }
 </style>
 </head>
 <body>
@@ -156,15 +165,74 @@
         <option value="cmc">Sort: CMC</option>
       </select>
     </div>
-    <div class="view-toggle-group">
-      <div class="view-toggle-btn" id="vbText" onclick="setView('text')" title="List"><i class="ti ti-list" aria-hidden="true"></i></div>
-      <div class="view-toggle-btn" id="vbStacks" onclick="setView('stacks')" title="Stacks"><i class="ti ti-stack-2" aria-hidden="true"></i></div>
-      <div class="view-toggle-btn active" id="vbGrid" onclick="setView('grid')" title="Grid"><i class="ti ti-layout-grid" aria-hidden="true"></i></div>
-      <div class="view-toggle-btn" id="vbSpoiler" onclick="setView('spoiler')" title="Spoiler"><i class="ti ti-eye" aria-hidden="true"></i></div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button class="btn btn-ghost btn-sm" onclick="openAddCardModal()"><i class="ti ti-plus" aria-hidden="true"></i> Add card</button>
+      <button class="btn btn-ghost btn-sm" id="selectModeBtn" onclick="toggleSelectMode()"><i class="ti ti-checkbox" aria-hidden="true"></i> Select</button>
+      <button class="btn btn-ghost btn-sm" onclick="openResyncModal()" title="Paste an updated decklist and sync changes"><i class="ti ti-refresh" aria-hidden="true"></i> Re-sync</button>
+      <div class="view-toggle-group">
+        <div class="view-toggle-btn" id="vbText" onclick="setView('text')" title="List"><i class="ti ti-list" aria-hidden="true"></i></div>
+        <div class="view-toggle-btn" id="vbStacks" onclick="setView('stacks')" title="Stacks"><i class="ti ti-stack-2" aria-hidden="true"></i></div>
+        <div class="view-toggle-btn active" id="vbGrid" onclick="setView('grid')" title="Grid"><i class="ti ti-layout-grid" aria-hidden="true"></i></div>
+        <div class="view-toggle-btn" id="vbSpoiler" onclick="setView('spoiler')" title="Spoiler"><i class="ti ti-eye" aria-hidden="true"></i></div>
+      </div>
     </div>
   </div>
   <div class="pane-body" id="cardsBody">
     <div class="empty-state"><div class="empty-title">Loading deck...</div></div>
+  </div>
+</div>
+
+<!-- SELECTION ACTION BAR -->
+<div id="selectionBar" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--black);color:#fff;border-radius:28px;padding:10px 10px 10px 20px;display:flex;align-items:center;gap:14px;z-index:250;box-shadow:0 8px 24px rgba(0,0,0,0.25);">
+  <span id="selectionCount" style="font-size:13px;font-weight:500;">0 selected</span>
+  <button class="btn btn-sm" style="background:var(--pink);color:#fff;" onclick="openRemoveSelectedModal()">Remove from deck</button>
+  <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);" onclick="toggleSelectMode()">Cancel</button>
+</div>
+
+<!-- ADD CARD MODAL -->
+<div class="modal-overlay" id="addCardModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-title">Add card to deck</div>
+    <div style="position:relative;">
+      <input type="text" id="addCardInput" placeholder="Start typing a card name..." style="width:100%;" oninput="handleAddCardInput()" autocomplete="off">
+      <div id="addCardSuggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:0.5px solid var(--border2);border-radius:8px;margin-top:4px;max-height:220px;overflow-y:auto;z-index:10;box-shadow:0 4px 16px rgba(0,0,0,0.1);"></div>
+    </div>
+    <div id="addCardStatus" style="font-size:12px;color:var(--ink3);margin-top:10px;min-height:16px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+      <button class="btn btn-ghost" onclick="closeAddCardModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- REMOVE SELECTED MODAL -->
+<div class="modal-overlay" id="removeSelectedModal">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-title">Remove cards from deck</div>
+    <div id="removeSelectedList" style="max-height:200px;overflow-y:auto;font-size:13px;color:var(--ink);margin-bottom:14px;line-height:1.8;"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);margin-bottom:16px;cursor:pointer;">
+      <input type="checkbox" id="moveToBulkCheckbox" checked style="width:auto;">
+      Move these back to Bulk in your collection (where currently listed against this deck)
+    </label>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeRemoveSelectedModal()">Cancel</button>
+      <button class="btn" style="background:var(--pink);color:#fff;" id="confirmRemoveBtn" onclick="confirmRemoveSelected()">Remove</button>
+    </div>
+  </div>
+</div>
+
+<!-- RE-SYNC MODAL -->
+<div class="modal-overlay" id="resyncModal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-title">Re-sync deck</div>
+    <p style="font-size:13px;color:var(--ink3);margin-bottom:12px;">Paste your updated decklist export below. We'll show you exactly what's changed before applying anything.</p>
+    <textarea id="resyncPaste" rows="10" placeholder="Paste your updated decklist here..." style="width:100%;font-family:monospace;font-size:12px;line-height:1.6;margin-bottom:12px;"></textarea>
+    <div id="resyncStatus" style="font-size:12px;color:var(--ink3);margin-bottom:12px;white-space:pre-line;"></div>
+    <div id="resyncDiff" style="display:none;margin-bottom:12px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeResyncModal()">Cancel</button>
+      <button class="btn btn-primary" id="resyncPreviewBtn" onclick="previewResync()">Preview changes</button>
+      <button class="btn" style="background:var(--teal);color:#fff;display:none;" id="resyncApplyBtn" onclick="applyResync()">Apply changes</button>
+    </div>
   </div>
 </div>
 
@@ -331,6 +399,7 @@ let state = {
   wincon: '', theme: '', powerLevel: 3,
   recsSummary: null, combosSummary: null,
   combosPromise: null, recsPromise: null,
+  selectMode: false, selectedCards: new Set(),
 };
 
 const CACHE_KEY = `mulligan_cache_v2_${deckId}`;
@@ -484,6 +553,259 @@ function isOwnedCard(name) {
 
 function filterCards() { renderCardsTab(); }
 
+// ===== SELECTION MODE =====
+function toggleSelectMode() {
+  state.selectMode = !state.selectMode;
+  state.selectedCards.clear();
+  document.getElementById('selectModeBtn').classList.toggle('active', state.selectMode);
+  document.getElementById('selectionBar').style.display = 'none';
+  renderCardsTab();
+}
+
+function handleCardClick(name) {
+  if (!state.selectMode) { openCardModal(name); return; }
+  if (name === state.cards[0]) return; // can't remove the commander
+  if (state.selectedCards.has(name)) state.selectedCards.delete(name);
+  else state.selectedCards.add(name);
+  renderCardsTab();
+  updateSelectionBar();
+}
+
+function updateSelectionBar() {
+  const bar = document.getElementById('selectionBar');
+  const count = state.selectedCards.size;
+  if (count === 0) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  document.getElementById('selectionCount').textContent = `${count} selected`;
+}
+
+// ===== ADD CARD =====
+let addCardDebounce;
+function openAddCardModal() {
+  document.getElementById('addCardModal').classList.add('open');
+  document.getElementById('addCardInput').value = '';
+  document.getElementById('addCardStatus').textContent = '';
+  document.getElementById('addCardSuggestions').style.display = 'none';
+  setTimeout(() => document.getElementById('addCardInput').focus(), 50);
+}
+function closeAddCardModal() { document.getElementById('addCardModal').classList.remove('open'); }
+
+function handleAddCardInput() {
+  clearTimeout(addCardDebounce);
+  const query = document.getElementById('addCardInput').value.trim();
+  const suggBox = document.getElementById('addCardSuggestions');
+  if (query.length < 2) { suggBox.style.display = 'none'; return; }
+  addCardDebounce = setTimeout(async () => {
+    try {
+      const res = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      const names = (data.data || []).slice(0, 8);
+      if (names.length === 0) { suggBox.style.display = 'none'; return; }
+      suggBox.innerHTML = names.map(n => `<div class="add-card-suggestion" onclick="addCardToDeck('${n.replace(/'/g,"\\'")}')">${n}</div>`).join('');
+      suggBox.style.display = 'block';
+    } catch (e) { suggBox.style.display = 'none'; }
+  }, 200);
+}
+
+async function addCardToDeck(name) {
+  document.getElementById('addCardSuggestions').style.display = 'none';
+  document.getElementById('addCardInput').value = '';
+  const statusEl = document.getElementById('addCardStatus');
+  statusEl.textContent = `Adding ${name}...`;
+  try {
+    const data = await TM.fetchScryfallBulk([name]);
+    const d = data[name.toLowerCase()] || data[name.split(' // ')[0].toLowerCase().trim()];
+    if (!d) { statusEl.textContent = `Couldn't find "${name}" on Scryfall.`; return; }
+    Object.assign(state.cardData, data);
+    state.cards.push(d.name);
+    await TM.saveDeck({ id: deckId, cardlist: state.cards.join('\n') });
+    state.deck.cardlist = state.cards.join('\n');
+
+    // Offer to pull one copy from bulk into this deck, if you own one sitting unused.
+    const frontName = d.name.split(' // ')[0].toLowerCase().trim();
+    const bulkEntryIndex = state.collectionRaw.findIndex(c =>
+      (c.name || '').split(' // ')[0].toLowerCase().trim() === frontName && (c.listedIn || 'Bulk').toLowerCase() === 'bulk'
+    );
+    if (bulkEntryIndex >= 0) {
+      const moveIt = confirm(`You have ${d.name} in Bulk. Mark 1 copy as moved into this deck?`);
+      if (moveIt) {
+        state.collectionRaw[bulkEntryIndex].listedIn = state.deck.name || state.cards[0];
+        await TM.saveCollection(state.collectionRaw);
+      }
+    }
+    renderCardsTab();
+    renderStats();
+    renderManaBase();
+    statusEl.textContent = `✓ Added ${d.name} to the deck.`;
+  } catch (e) {
+    statusEl.textContent = `Error: ${e.message}`;
+  }
+}
+
+// ===== REMOVE SELECTED (with optional move-to-bulk) =====
+function openRemoveSelectedModal() {
+  const names = [...state.selectedCards];
+  if (names.length === 0) return;
+  document.getElementById('removeSelectedList').innerHTML = names.map(n => `• ${n}`).join('<br>');
+  document.getElementById('moveToBulkCheckbox').checked = true;
+  document.getElementById('removeSelectedModal').classList.add('open');
+}
+function closeRemoveSelectedModal() { document.getElementById('removeSelectedModal').classList.remove('open'); }
+
+async function confirmRemoveSelected() {
+  const names = [...state.selectedCards];
+  const moveToBulk = document.getElementById('moveToBulkCheckbox').checked;
+  const btn = document.getElementById('confirmRemoveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const deckNameLower = (state.deck.name || state.cards[0] || '').toLowerCase();
+    names.forEach(name => {
+      const idx = state.cards.findIndex(c => c === name);
+      if (idx >= 0) state.cards.splice(idx, 1);
+      if (moveToBulk) {
+        const entryIndex = state.collectionRaw.findIndex(c =>
+          (c.name || '').split(' // ')[0].toLowerCase().trim() === name.split(' // ')[0].toLowerCase().trim()
+          && (c.listedIn || '').toLowerCase() === deckNameLower
+        );
+        if (entryIndex >= 0) state.collectionRaw[entryIndex].listedIn = 'Bulk';
+      }
+    });
+    await TM.saveDeck({ id: deckId, cardlist: state.cards.join('\n') });
+    state.deck.cardlist = state.cards.join('\n');
+    if (moveToBulk) await TM.saveCollection(state.collectionRaw);
+    state.selectedCards.clear();
+    closeRemoveSelectedModal();
+    toggleSelectMode();
+    renderStats();
+    renderManaBase();
+  } catch (e) {
+    alert('Failed to remove cards: ' + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = 'Remove';
+}
+
+// ===== RE-SYNC (paste updated list, diff, apply) =====
+let resyncDiffData = null;
+
+function openResyncModal() {
+  document.getElementById('resyncPaste').value = '';
+  document.getElementById('resyncStatus').textContent = '';
+  document.getElementById('resyncDiff').style.display = 'none';
+  document.getElementById('resyncPreviewBtn').style.display = 'inline-flex';
+  document.getElementById('resyncApplyBtn').style.display = 'none';
+  resyncDiffData = null;
+  document.getElementById('resyncModal').classList.add('open');
+}
+function closeResyncModal() { document.getElementById('resyncModal').classList.remove('open'); }
+
+function nameFreqMap(names) {
+  const map = new Map();
+  names.forEach(n => {
+    const key = n.split(' // ')[0].toLowerCase().trim();
+    map.set(key, (map.get(key) || 0) + 1);
+  });
+  return map;
+}
+
+async function previewResync() {
+  const text = document.getElementById('resyncPaste').value.trim();
+  const statusEl = document.getElementById('resyncStatus');
+  if (!text) { statusEl.textContent = 'Paste a decklist first.'; return; }
+  const btn = document.getElementById('resyncPreviewBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  const newCards = TM.parseDeckList(text);
+  const validation = await TM.validateDeckList(newCards);
+  btn.disabled = false;
+  btn.textContent = 'Preview changes';
+  if (!validation.ok) {
+    statusEl.style.color = 'var(--pink)';
+    statusEl.textContent = validation.error;
+    return;
+  }
+  statusEl.style.color = 'var(--ink3)';
+  statusEl.textContent = '';
+
+  const oldFreq = nameFreqMap(state.cards);
+  const newFreq = nameFreqMap(newCards);
+  const added = [], removed = [];
+  const allKeys = new Set([...oldFreq.keys(), ...newFreq.keys()]);
+  const nameLookup = {};
+  state.cards.forEach(n => nameLookup[n.split(' // ')[0].toLowerCase().trim()] = n);
+  newCards.forEach(n => nameLookup[n.split(' // ')[0].toLowerCase().trim()] = n);
+  allKeys.forEach(key => {
+    const oldCount = oldFreq.get(key) || 0;
+    const newCount = newFreq.get(key) || 0;
+    if (newCount > oldCount) added.push({ name: nameLookup[key], count: newCount - oldCount });
+    if (oldCount > newCount) removed.push({ name: nameLookup[key], count: oldCount - newCount });
+  });
+
+  resyncDiffData = { newCards, added, removed };
+  const diffEl = document.getElementById('resyncDiff');
+  if (added.length === 0 && removed.length === 0) {
+    diffEl.innerHTML = `<div class="alert alert-ok">No changes detected — decklist is identical.</div>`;
+  } else {
+    diffEl.innerHTML = `
+      ${added.length > 0 ? `<div class="alert alert-ok" style="margin-bottom:8px;"><strong>+${added.reduce((s,a)=>s+a.count,0)} added:</strong><br>${added.map(a => `${a.count > 1 ? a.count+'× ' : ''}${a.name}`).join(', ')}</div>` : ''}
+      ${removed.length > 0 ? `<div class="alert alert-warn" style="margin-bottom:8px;"><strong>−${removed.reduce((s,a)=>s+a.count,0)} removed:</strong><br>${removed.map(a => `${a.count > 1 ? a.count+'× ' : ''}${a.name}`).join(', ')}</div>` : ''}
+      ${removed.length > 0 ? `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);cursor:pointer;"><input type="checkbox" id="resyncMoveToBulk" checked style="width:auto;"> Move removed cards back to Bulk in your collection</label>` : ''}
+    `;
+  }
+  diffEl.style.display = 'block';
+  document.getElementById('resyncPreviewBtn').style.display = 'none';
+  document.getElementById('resyncApplyBtn').style.display = (added.length > 0 || removed.length > 0) ? 'inline-flex' : 'none';
+}
+
+async function applyResync() {
+  if (!resyncDiffData) return;
+  const btn = document.getElementById('resyncApplyBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const moveToBulk = document.getElementById('resyncMoveToBulk')?.checked ?? true;
+    const deckNameLower = (state.deck.name || state.cards[0] || '').toLowerCase();
+    if (moveToBulk) {
+      resyncDiffData.removed.forEach(r => {
+        for (let i = 0; i < r.count; i++) {
+          const entryIndex = state.collectionRaw.findIndex(c =>
+            (c.name || '').split(' // ')[0].toLowerCase().trim() === r.name.split(' // ')[0].toLowerCase().trim()
+            && (c.listedIn || '').toLowerCase() === deckNameLower
+          );
+          if (entryIndex >= 0) state.collectionRaw[entryIndex].listedIn = 'Bulk';
+        }
+      });
+      await TM.saveCollection(state.collectionRaw);
+    }
+    state.cards = resyncDiffData.newCards;
+    await TM.saveDeck({ id: deckId, cardlist: state.cards.join('\n') });
+    state.deck.cardlist = state.cards.join('\n');
+    if (resyncDiffData.added.length > 0) {
+      const newData = await TM.fetchScryfallBulk(resyncDiffData.added.map(a => a.name));
+      Object.assign(state.cardData, newData);
+    }
+    closeResyncModal();
+    renderCardsTab();
+    renderStats();
+    renderManaBase();
+    renderBannerSub();
+  } catch (e) {
+    document.getElementById('resyncStatus').style.color = 'var(--pink)';
+    document.getElementById('resyncStatus').textContent = 'Failed to apply: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Apply changes';
+}
+
+document.addEventListener('click', e => {
+  if (e.target === document.getElementById('addCardModal')) closeAddCardModal();
+  if (e.target === document.getElementById('removeSelectedModal')) closeRemoveSelectedModal();
+  if (e.target === document.getElementById('resyncModal')) closeResyncModal();
+});
+
+
+
 function renderCardsTab() {
   if (!state.deckAnalysed && state.cards.length === 0) return;
   const body = document.getElementById('cardsBody');
@@ -510,10 +832,13 @@ function renderCardsTab() {
         const d = cardLookup(name);
         const owned = isOwnedCard(name);
         const imgUrl = d?.image_uris?.normal || '';
-        html += `<div class="mtg-card" onclick="openCardModal('${name.replace(/'/g, "\\'")}')">
+        const isCommander = name === state.cards[0];
+        const selected = state.selectedCards.has(name);
+        html += `<div class="mtg-card ${selected ? 'card-selected' : ''}" onclick="handleCardClick('${name.replace(/'/g, "\\'")}')">
           ${imgUrl ? `<img src="${imgUrl}" alt="${name}" loading="lazy">` : `<div class="mtg-card-name-fallback">${name}</div>`}
           <div class="mtg-card-bottom">${name.split(' // ')[0]}</div>
           ${owned ? '<div class="own-dot"></div>' : ''}
+          ${state.selectMode && !isCommander ? `<div class="select-check ${selected ? 'checked' : ''}">${selected ? '✓' : ''}</div>` : ''}
         </div>`;
       });
       html += `</div>`;
@@ -522,8 +847,11 @@ function renderCardsTab() {
       groupCards2.forEach(name => {
         const d = cardLookup(name);
         const imgUrl = d?.image_uris?.normal || '';
-        html += `<div class="stacks-card" onclick="openCardModal('${name.replace(/'/g, "\\'")}')" title="${name}">
+        const isCommander = name === state.cards[0];
+        const selected = state.selectedCards.has(name);
+        html += `<div class="stacks-card ${selected ? 'card-selected' : ''}" onclick="handleCardClick('${name.replace(/'/g, "\\'")}')" title="${name}">
           ${imgUrl ? `<img src="${imgUrl}" alt="${name}" loading="lazy">` : `<div class="stacks-card-fallback">${name.split(' // ')[0]}</div>`}
+          ${state.selectMode && !isCommander ? `<div class="select-check ${selected ? 'checked' : ''}">${selected ? '✓' : ''}</div>` : ''}
         </div>`;
       });
       html += `</div>`;
@@ -532,8 +860,10 @@ function renderCardsTab() {
       groupCards2.forEach(name => {
         const d = cardLookup(name);
         const owned = isOwnedCard(name);
-        html += `<div class="text-item" onclick="openCardModal('${name.replace(/'/g, "\\'")}')">
-          ${owned ? '<div class="own-dot" style="position:static;flex-shrink:0;"></div>' : '<div style="width:7px;"></div>'}
+        const isCommander = name === state.cards[0];
+        const selected = state.selectedCards.has(name);
+        html += `<div class="text-item ${selected ? 'card-selected' : ''}" onclick="handleCardClick('${name.replace(/'/g, "\\'")}')">
+          ${state.selectMode && !isCommander ? `<div class="select-check select-check-inline ${selected ? 'checked' : ''}">${selected ? '✓' : ''}</div>` : (owned ? '<div class="own-dot" style="position:static;flex-shrink:0;"></div>' : '<div style="width:7px;"></div>')}
           <span class="text-item-name">${name}</span>
           <span class="text-item-type">${d?.type_line?.split('—')[0]?.trim() || ''}</span>
           <span class="text-item-cmc">${d?.cmc > 0 ? d.cmc : ''}</span>
