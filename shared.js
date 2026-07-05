@@ -313,7 +313,7 @@ function parseDeckList(text) {
     // Strip foil flag: *F*
     name = name.replace(/\s*\*F\*\s*$/, '').trim();
     // Strip set code + collector number: " (SET) 123" or " (SET) 123s" at end
-    name = name.replace(/\s+\([A-Z0-9]+\)\s+[\w★]+\s*$/, '').trim();
+    name = name.replace(/\s+\([A-Z0-9]+\)\s+[\w★-]+\s*$/, '').trim();
     // Strip trailing set code only: " (SET)"
     name = name.replace(/\s+\([A-Z0-9]{2,5}\)\s*$/, '').trim();
     // Handle Japanese/non-latin cards — skip if name has no latin chars
@@ -407,7 +407,7 @@ function parseCollection(text) {
       let qty = 1, name = line;
       if (qtyMatch) { qty = parseInt(qtyMatch[1]); name = qtyMatch[2]; }
       name = name.replace(/\s*\*F\*\s*$/, '').trim();
-      name = name.replace(/\s+\([A-Z0-9]+\)\s+[\w★]+\s*$/, '').trim();
+      name = name.replace(/\s+\([A-Z0-9]+\)\s+[\w★-]+\s*$/, '').trim();
       if (!name || /^\d+$/.test(name) || !/[a-zA-Z]/.test(name)) continue;
       cards.push({ name, quantity: qty, set: '', listedIn: 'Bulk' });
     }
@@ -427,7 +427,7 @@ function parseCollection(text) {
     if (parts.length < 2) continue;
     let name = (parts[nameCol] || '').trim();
     name = name.replace(/\s*\*F\*\s*$/, '').trim();
-    name = name.replace(/\s+\([A-Z0-9]+\)\s+[\w★]+\s*$/, '').trim();
+    name = name.replace(/\s+\([A-Z0-9]+\)\s+[\w★-]+\s*$/, '').trim();
     if (!name || !/[a-zA-Z]/.test(name)) continue;
     const qty = qtyCol >= 0 ? (parseInt(parts[qtyCol]) || 1) : 1;
     const setName = setCol >= 0 ? (parts[setCol] || '').trim() : '';
