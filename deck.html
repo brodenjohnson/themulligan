@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Mulligan — Deck</title>
 <link rel="stylesheet" href="/shared.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 <style>
   .main { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
   .pane-body { padding: 20px 24px; background: var(--bg); min-height: 400px; }
@@ -450,6 +451,17 @@ async function init() {
       const loading = document.getElementById('cardsBody');
       loading.innerHTML = '<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Loading card data...</div></div>';
       state.cardData = await TM.fetchScryfallBulk(state.cards);
+      // Overlay exact printings (correct artwork) for any card where the original decklist
+      // paste included a set code + collector number, e.g. "Krenko, Mob Boss (SLD) 2407".
+      // Falls back cleanly to the name-based data above for anything that doesn't resolve.
+      const printingHints = TM.extractPrintingHints(deck.cardlist || '');
+      if (Object.keys(printingHints).length > 0) {
+        loading.innerHTML = '<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Matching your exact card art...</div></div>';
+        const exactPrintings = await TM.fetchExactPrintings(printingHints);
+        Object.entries(exactPrintings).forEach(([nameKey, cardData]) => {
+          state.cardData[nameKey] = cardData;
+        });
+      }
       setDeckCache({ cardData: state.cardData });
     }
     state.deckAnalysed = true;
@@ -1770,8 +1782,14 @@ async function saveDeckSettings() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Saving...';
   try {
-    await TM.saveDeck({ id: deckId, name: name || cards[0], commander: cards[0], cardlist: list, theme, win_con: wincon, power_level: power });
-    state.deck = { ...state.deck, name: name || cards[0], theme, win_con: wincon, power_level: power, cardlist: list };
+    const oldCards = state.cards;
+    const finalName = name || cards[0];
+    await TM.saveDeck({ id: deckId, name: finalName, commander: cards[0], cardlist: list, theme, win_con: wincon, power_level: power });
+    try {
+      const { collectionRaw: updated, pulledFromBulk, returnedToBulk } = TM.reconcileDeckCollection(oldCards, cards, finalName, state.collectionRaw);
+      if (pulledFromBulk > 0 || returnedToBulk > 0) await TM.saveCollection(updated);
+    } catch (e) { console.warn('Collection reconciliation skipped', e); }
+    state.deck = { ...state.deck, name: finalName, theme, win_con: wincon, power_level: power, cardlist: list };
     state.wincon = wincon;
     state.theme = theme;
     state.powerLevel = power;
