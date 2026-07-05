@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Mulligan — Your decks</title>
 <link rel="stylesheet" href="/shared.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 <style>
   .main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
@@ -282,7 +283,16 @@ async function updateDeck() {
   }
   btn.innerHTML = '<span class="spinner"></span> Saving...';
   try {
-    await TM.saveDeck({ id, name: name || cards[0], commander: cards[0], cardlist: list, theme, win_con: wincon, power_level: power });
+    const existingDeck = allDecks.find(d => d.id === id);
+    const oldCards = TM.parseDeckList(existingDeck?.cardlist || '');
+    const finalName = name || cards[0];
+    await TM.saveDeck({ id, name: finalName, commander: cards[0], cardlist: list, theme, win_con: wincon, power_level: power });
+    try {
+      const freshCollection = await TM.getCollection();
+      const collectionRaw = (freshCollection || []).map(c => typeof c === 'string' ? { name: c, quantity: 1, listedIn: 'Bulk' } : c);
+      const { collectionRaw: updated, pulledFromBulk, returnedToBulk } = TM.reconcileDeckCollection(oldCards, cards, finalName, collectionRaw);
+      if (pulledFromBulk > 0 || returnedToBulk > 0) await TM.saveCollection(updated);
+    } catch (e) { console.warn('Collection reconciliation skipped', e); }
     closeEditDeckModal();
     const decks = await TM.getDecks();
     allDecks = decks;
@@ -449,6 +459,13 @@ async function saveNewDeck() {
   btn.innerHTML = '<span class="spinner"></span> Saving...';
   try {
     const id = await TM.saveDeck({ name: deckName, commander, cardlist: list, power_level: 3 });
+    // Tag matching Bulk copies in the collection as now belonging to this deck.
+    try {
+      const freshCollection = await TM.getCollection();
+      const collectionRaw = (freshCollection || []).map(c => typeof c === 'string' ? { name: c, quantity: 1, listedIn: 'Bulk' } : c);
+      const { collectionRaw: updated, pulledFromBulk } = TM.reconcileDeckCollection([], cards, deckName, collectionRaw);
+      if (pulledFromBulk > 0) await TM.saveCollection(updated);
+    } catch (e) { console.warn('Collection reconciliation skipped', e); }
     closeNewDeckModal();
     window.location.href = `/deck/${id}`;
   } catch (e) {
