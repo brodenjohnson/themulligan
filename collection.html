@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Mulligan — Collection</title>
 <link rel="stylesheet" href="/shared.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 <style>
   .main { max-width: 1280px; margin: 0 auto; padding: 20px 24px; }
   .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
@@ -100,11 +101,11 @@
       <div class="page-sub" id="pageSubtitle">Loading...</div>
     </div>
     <div style="display:flex;gap:8px;">
-      <button class="btn btn-ghost" onclick="openUploadModal()">
-        <i class="ti ti-upload" aria-hidden="true"></i> Upload collection
+      <button class="btn btn-ghost" id="syncDecksBtn" onclick="syncAllDecks()" title="Tag collection cards with which deck they're currently in">
+        <i class="ti ti-refresh" aria-hidden="true"></i> Sync decks
       </button>
       <button class="btn btn-primary" onclick="openUploadModal()">
-        <i class="ti ti-refresh" aria-hidden="true"></i> Re-sync
+        <i class="ti ti-upload" aria-hidden="true"></i> Upload collection
       </button>
     </div>
   </div>
@@ -213,6 +214,40 @@ function getDeckColor(deckName) {
     deckColorMap[deckName] = DECK_COLORS[idx];
   }
   return deckColorMap[deckName];
+}
+
+async function syncAllDecks() {
+  const btn = document.getElementById('syncDecksBtn');
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Syncing...';
+  try {
+    const decks = await TM.getDecks();
+    let collectionRaw = state.rawItems;
+    let totalPulled = 0;
+    for (const deck of decks) {
+      const cards = TM.parseDeckList(deck.cardlist || '');
+      const deckName = deck.name || cards[0] || '';
+      const { collectionRaw: updated, pulledFromBulk } = TM.reconcileDeckCollection([], cards, deckName, collectionRaw);
+      collectionRaw = updated;
+      totalPulled += pulledFromBulk;
+    }
+    if (totalPulled > 0) {
+      await TM.saveCollection(collectionRaw);
+    }
+    btn.innerHTML = originalHtml;
+    btn.disabled = false;
+    if (totalPulled > 0) {
+      alert(`Synced ${decks.length} deck${decks.length !== 1 ? 's' : ''} — tagged ${totalPulled} card${totalPulled !== 1 ? 's' : ''} as in-deck.`);
+      window.location.reload();
+    } else {
+      alert('Everything is already in sync.');
+    }
+  } catch (e) {
+    btn.innerHTML = originalHtml;
+    btn.disabled = false;
+    alert('Sync failed: ' + e.message);
+  }
 }
 
 async function init() {
