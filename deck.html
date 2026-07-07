@@ -164,7 +164,8 @@
   .bm-price { display: flex; justify-content: space-between; align-items: center; padding: 9px 10px; background: rgba(255,255,255,0.04); border-radius: 7px; }
   .bm-price-value { font-size: 14px; font-weight: 700; }
   .bm-price-sub { font-size: 9px; color: rgba(255,255,255,0.4); }
-  .bm-lock-in { margin-top: auto; background: linear-gradient(90deg, var(--teal), #00b8b0); color: #061716; font-weight: 700; padding: 11px; border-radius: 8px; text-align: center; font-size: 12px; cursor: pointer; opacity: 0.45; }
+  .bm-lock-in { margin-top: auto; background: linear-gradient(90deg, var(--teal), #00b8b0); color: #061716; font-weight: 700; padding: 11px; border-radius: 8px; text-align: center; font-size: 12px; cursor: pointer; transition: transform 0.15s; }
+  .bm-lock-in:hover { transform: translateY(-1px); }
 
   .bm-main { flex: 1; padding: 24px 28px; overflow-y: auto; position: relative; z-index: 2; }
   .bm-main-header { margin-bottom: 18px; }
@@ -473,6 +474,22 @@
       <div class="cm-text" id="cmText"></div>
       <div class="cm-pt" id="cmPt"></div>
       <div class="cm-set" id="cmSet"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="bmLockInModal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">Lock in this deck</div>
+    <div id="bmLockInDiff" style="max-height:280px;overflow-y:auto;margin-bottom:14px;"></div>
+    <label id="bmMoveToBulkRow" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);margin-bottom:16px;cursor:pointer;">
+      <input type="checkbox" id="bmMoveToBulkCheckbox" checked style="width:auto;">
+      Move removed cards back to Bulk in your collection
+    </label>
+    <div id="bmLockInStatus" style="font-size:12px;color:var(--ink3);margin-bottom:12px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-ghost" onclick="document.getElementById('bmLockInModal').classList.remove('open')">Keep building</button>
+      <button class="btn btn-teal" id="bmConfirmLockInBtn" onclick="bmConfirmLockIn()">Lock it in</button>
     </div>
   </div>
 </div>
@@ -804,7 +821,7 @@ function renderBmHud() {
       <div><div class="bm-price-value">$${totalPrice.toFixed(0)}</div><div class="bm-price-sub">$${ownedPrice.toFixed(0)} already owned</div></div>
       <i class="ti ti-currency-dollar" style="color:rgba(255,255,255,0.3);font-size:18px;" aria-hidden="true"></i>
     </div>
-    <div class="bm-lock-in">Lock in deck (coming soon)</div>
+    <div class="bm-lock-in" onclick="bmOpenLockInModal()">Lock in deck</div>
   `;
 }
 
@@ -971,6 +988,71 @@ function bmApplyPack() {
   renderBmMain();
   renderBmHud();
 }
+
+/* ===== LOCK IN ===== */
+function bmDiff() {
+  const normalize = n => n.split(' // ')[0].toLowerCase().trim();
+  const oldFreq = new Map();
+  state.cards.forEach(n => { const k = normalize(n); oldFreq.set(k, (oldFreq.get(k) || 0) + 1); });
+  const newFreq = new Map();
+  bmState.draftCards.forEach(n => { const k = normalize(n); newFreq.set(k, (newFreq.get(k) || 0) + 1); });
+  const nameLookup = {};
+  [...state.cards, ...bmState.draftCards].forEach(n => nameLookup[normalize(n)] = n);
+  const added = [], removed = [];
+  new Set([...oldFreq.keys(), ...newFreq.keys()]).forEach(key => {
+    const oldC = oldFreq.get(key) || 0, newC = newFreq.get(key) || 0;
+    if (newC > oldC) added.push({ name: nameLookup[key], count: newC - oldC });
+    if (oldC > newC) removed.push({ name: nameLookup[key], count: oldC - newC });
+  });
+  return { added, removed };
+}
+
+function bmOpenLockInModal() {
+  const { added, removed } = bmDiff();
+  const diffEl = document.getElementById('bmLockInDiff');
+  let html = `<div style="font-size:13px;color:var(--ink2);margin-bottom:10px;">${bmState.draftCards.length} cards total (including commander)${bmState.draftCards.length !== 100 ? ` — ${bmState.draftCards.length > 100 ? 'that\'s ' + (bmState.draftCards.length - 100) + ' over 100' : (100 - bmState.draftCards.length) + ' short of 100'}` : ' — exactly 100'}</div>`;
+  if (added.length > 0) html += `<div class="alert alert-ok" style="margin-bottom:8px;"><strong>+${added.reduce((s,a)=>s+a.count,0)} added:</strong> ${added.map(a => (a.count>1?a.count+'× ':'')+a.name).join(', ')}</div>`;
+  if (removed.length > 0) html += `<div class="alert alert-warn" style="margin-bottom:8px;"><strong>−${removed.reduce((s,a)=>s+a.count,0)} removed:</strong> ${removed.map(a => (a.count>1?a.count+'× ':'')+a.name).join(', ')}</div>`;
+  if (bmState.sideboard.length > 0) html += `<div class="alert alert-warn">${bmState.sideboard.length} card${bmState.sideboard.length !== 1 ? 's' : ''} still sitting in your sideboard, unresolved — that's fine, you can keep them there and revisit any time.</div>`;
+  if (added.length === 0 && removed.length === 0) html += `<div style="font-size:12px;color:var(--ink3);">No changes from the currently saved deck.</div>`;
+  diffEl.innerHTML = html;
+  document.getElementById('bmMoveToBulkRow').style.display = removed.length > 0 ? 'flex' : 'none';
+  document.getElementById('bmLockInStatus').textContent = '';
+  document.getElementById('bmLockInModal').classList.add('open');
+}
+
+async function bmConfirmLockIn() {
+  const btn = document.getElementById('bmConfirmLockInBtn');
+  const statusEl = document.getElementById('bmLockInStatus');
+  const moveToBulk = document.getElementById('bmMoveToBulkCheckbox').checked;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Saving...';
+  try {
+    const oldCards = state.cards;
+    const deckName = state.deck.name || bmState.draftCards[0];
+    await TM.saveDeck({ id: deckId, cardlist: bmState.draftCards.join('\n') });
+    if (moveToBulk) {
+      const { collectionRaw: updated } = TM.reconcileDeckCollection(oldCards, bmState.draftCards, deckName, state.collectionRaw);
+      await TM.saveCollection(updated);
+    }
+    statusEl.style.color = 'var(--teal)';
+    statusEl.textContent = '✓ Locked in — reloading...';
+    setTimeout(() => window.location.reload(), 900);
+  } catch (e) {
+    statusEl.style.color = 'var(--pink)';
+    statusEl.textContent = 'Failed to save: ' + e.message;
+    btn.disabled = false;
+    btn.textContent = 'Lock it in';
+  }
+}
+
+document.addEventListener('click', e => {
+  if (e.target === document.getElementById('bmLockInModal')) {
+    document.getElementById('bmLockInModal').classList.remove('open');
+  }
+});
+
+
 
 function switchTabWithFocus(tab, focus) {
   switchTab(tab);
