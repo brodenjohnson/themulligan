@@ -1476,7 +1476,7 @@ async function runRecommendations(focus) {
   try {
     let recs = [];
     try {
-      const recRes = await fetch('https://api.recommander.cards/public-release/api/decks/recommend/top', {
+      const recRes = await fetch('/api/recommander', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ card_format: 'name', commander: state.cards[0].split(' // ')[0], partner: null, deck: state.cards.slice(1) }),
       });
