@@ -130,6 +130,7 @@
   </a>
   <div class="topbar-nav">
     <a href="/" class="nav-link">Your decks</a>
+    <a href="/collection" class="nav-link">Collection</a>
   </div>
   <div class="topbar-right">
     <div class="avatar" id="userAvatar" onclick="TM.signOut()">B</div>
@@ -411,6 +412,7 @@ let state = {
   combosPromise: null, recsPromise: null,
   selectMode: false, selectedCards: new Set(),
   intakeAnswered: false,
+  recsFocus: null,
 };
 
 const CACHE_KEY = `mulligan_cache_v2_${deckId}`;
@@ -551,6 +553,19 @@ function switchTab(tab) {
   const idx = tabMap.indexOf(tab);
   if (tabBtns[idx]) tabBtns[idx].classList.add('active');
   document.getElementById(`pane-${tab}`).classList.add('active');
+}
+
+function switchTabWithFocus(tab, focus) {
+  switchTab(tab);
+  if (tab === 'recs' && focus) {
+    state.recsFocus = focus;
+    state.recsPromise = runRecommendations(focus);
+  }
+}
+
+function clearRecsFocus() {
+  state.recsFocus = null;
+  state.recsPromise = runRecommendations();
 }
 
 function setView(v) {
@@ -1078,7 +1093,7 @@ function renderStats() {
       <div class="stat-label">${label}</div>
       <div class="stat-value">${value}</div>
       <div class="stat-sub ${subClass || ''}">${sub}</div>
-      ${link ? `<a class="stat-link" onclick="switchTab('${link.tab}')">${link.label} →</a>` : ''}
+      ${link ? `<a class="stat-link" onclick="switchTabWithFocus('${link.tab}', ${link.focus ? `'${link.focus}'` : 'null'})">${link.label} →</a>` : ''}
     </div>`;
   }
 
@@ -1089,9 +1104,9 @@ function renderStats() {
         ${statCard('Total cards', cards.length, cards.length !== 100 ? `${cards.length > 100 ? cards.length - 100 + ' over' : 100 - cards.length + ' under'} 100` : '✓ Exactly 100', cards.length !== 100 ? 'stat-warn' : 'stat-ok')}
         ${statCard('Average CMC', avgCmc, 'excl. lands', '')}
         ${statCard('Lands', lands.length, lands.length < 36 ? `↓ Low (aim 36-38)` : lands.length > 38 ? '↑ Consider cutting' : '✓ Good range', lands.length < 36 ? 'stat-warn' : 'stat-ok', lands.length < 36 ? {tab:'mana', label:'Fix mana base'} : null)}
-        ${statCard('Ramp pieces', ramp.length, ramp.length < 8 ? '↓ Low (aim 8-12)' : '✓ Healthy', ramp.length < 8 ? 'stat-warn' : 'stat-ok', ramp.length < 8 ? {tab:'recs', label:'See ramp recommendations'} : null)}
-        ${statCard('Draw / loot', draw.length, draw.length < 8 ? '↓ Low (aim 8+)' : '✓ Healthy', draw.length < 8 ? 'stat-warn' : 'stat-ok', draw.length < 8 ? {tab:'recs', label:'See draw recommendations'} : null)}
-        ${statCard('Interaction', interaction.length, interaction.length < 6 ? '↓ Low (aim 6+)' : '✓ Healthy', interaction.length < 6 ? 'stat-warn' : 'stat-ok')}
+        ${statCard('Ramp pieces', ramp.length, ramp.length < 8 ? '↓ Low (aim 8-12)' : '✓ Healthy', ramp.length < 8 ? 'stat-warn' : 'stat-ok', ramp.length < 8 ? {tab:'recs', focus:'ramp', label:'See ramp recommendations'} : null)}
+        ${statCard('Draw / loot', draw.length, draw.length < 8 ? '↓ Low (aim 8+)' : '✓ Healthy', draw.length < 8 ? 'stat-warn' : 'stat-ok', draw.length < 8 ? {tab:'recs', focus:'draw', label:'See draw recommendations'} : null)}
+        ${statCard('Interaction', interaction.length, interaction.length < 6 ? '↓ Low (aim 6+)' : '✓ Healthy', interaction.length < 6 ? 'stat-warn' : 'stat-ok', interaction.length < 6 ? {tab:'recs', focus:'interaction', label:'See removal recommendations'} : null)}
         ${statCard(bestArchetype.name, bestArchetype.count, 'Deck\'s detected engine', '')}
         ${statCard('Creatures', creatures.length, `of ${nonLands.length} non-lands`, '')}
       </div>
@@ -1450,9 +1465,14 @@ async function runCombos() {
   }
 }
 
-async function runRecommendations() {
+async function runRecommendations(focus) {
+  const focusLabels = {
+    ramp: 'mana ramp / acceleration',
+    draw: 'card draw / card advantage',
+    interaction: 'removal / interaction',
+  };
   const container = document.getElementById('recsContent');
-  container.innerHTML = '<div class="empty-state"><div class="empty-title"><span class="spinner"></span> Fetching recommendations...</div></div>';
+  container.innerHTML = `<div class="empty-state"><div class="empty-title"><span class="spinner"></span> ${focus ? `Finding ${focusLabels[focus] || focus} cards...` : 'Fetching recommendations...'}</div></div>`;
   try {
     let recs = [];
     try {
@@ -1480,6 +1500,9 @@ async function runRecommendations() {
     const ownedListBlock = ownedNotInDeckAll.length > 0
       ? `\nOWNED CARDS LIST (every card the user owns, in the correct colour identity, that is not already in this deck — for the "collection" section ONLY pick from this exact list, do not pick anything outside it):\n${ownedNotInDeckAll.join(', ')}`
       : '\nNo collection data available — skip the "collection" section (return an empty array for it).';
+    const focusInstruction = focus
+      ? `\nIMPORTANT FOCUS: The user's Stats page flagged this deck as low on ${focusLabels[focus] || focus} (a specific weakness that needs fixing). ALL of your "best" and "collection" picks should be ${focusLabels[focus] || focus} cards specifically — not general upgrades. Themed alternatives can stay theme-focused as usual.`
+      : '';
 
     const prompt = `Commander deck: "${state.cards[0].split(' // ')[0]}"
 Win condition: ${state.wincon || 'Not specified yet — infer the most likely win condition purely from the actual decklist below'}
@@ -1488,6 +1511,7 @@ Power level: ${state.powerLevel}/5
 FULL current decklist (${state.cards.length} cards — do not suggest ANY of these, they are already in the deck): ${state.cards.join(', ')}
 ${recSuggestions}
 ${ownedListBlock}
+${focusInstruction}
 
 Based on this deck's strategy, do three things:
 1. Pick the top 10 best card upgrades not already in the deck (from anywhere, regardless of ownership).
@@ -1567,11 +1591,17 @@ Return JSON only, no markdown:
     }
     container.innerHTML = `
       <div style="padding:20px 24px;">
-        <div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><a id="recsRefreshBtn" class="stat-link" style="cursor:pointer;">↻ Refresh</a></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          ${focus ? `<div style="display:flex;align-items:center;gap:8px;">
+            <span class="badge badge-bracket">Focused on: ${focusLabels[focus] || focus}</span>
+            <a class="stat-link" style="cursor:pointer;" onclick="clearRecsFocus()">✕ Clear focus</a>
+          </div>` : '<span></span>'}
+          <a id="recsRefreshBtn" class="stat-link" style="cursor:pointer;">↻ Refresh</a>
+        </div>
         ${droppedCount > 0 ? `<div class="alert alert-warn" style="margin-bottom:14px;">Filtered out ${droppedCount} suggestion${droppedCount !== 1 ? 's' : ''} that couldn't be verified as real cards.</div>` : ''}
         <div class="rec-layout">
           <div>
-            <div class="rec-col-header">Best cards <span class="badge badge-bracket" style="font-size:10px;">Performance</span></div>
+            <div class="rec-col-header">${focus ? focusLabels[focus] || focus : 'Best cards'} <span class="badge badge-bracket" style="font-size:10px;">Performance</span></div>
             ${verifiedBest.map(r => recCard(r, 'best')).join('') || '<div style="color:var(--ink3);font-size:13px;">No verified recommendations found.</div>'}
           </div>
           <div>
@@ -1594,7 +1624,7 @@ Return JSON only, no markdown:
       themed: verifiedThemed.map(r => `${r.name} (${state.collection.has(r.name.toLowerCase()) ? 'owned' : 'need to buy'}): ${r.reason}${r.trade_off ? ' — trade-off: ' + r.trade_off : ''}${r.swap_for ? ` [suggested cut to make room: ${r.swap_for}]` : ''}`),
       collection: verifiedCollection.map(r => `${r.name} (already owned, sitting in bulk): ${r.reason}${r.swap_for ? ` [suggested cut to make room: ${r.swap_for}]` : ''}`),
     };
-    setDeckCache({ recsHtml: container.innerHTML, recsSummary: state.recsSummary });
+    if (!focus) setDeckCache({ recsHtml: container.innerHTML, recsSummary: state.recsSummary });
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load recommendations</div><div class="empty-sub">${e.message}</div></div>`;
   }
