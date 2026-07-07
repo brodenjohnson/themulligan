@@ -620,9 +620,18 @@ function isLand(card, cardData) {
   return basics.some(b => card.toLowerCase() === b) || landWords.some(k => card.toLowerCase().includes(k));
 }
 
-function isTappedLand(name) {
-  const tapped = ['cliffs','caves','bluff','moor','isle','bloodfell','swiftwater','thriving','refuge','guildgate','panorama','bounty','gain lands'];
-  return tapped.some(k => name.toLowerCase().includes(k));
+// Reads the ACTUAL card text (not a name-pattern guess) to determine if a land can enter
+// tapped. Every real tapland — Temples, Guildgates, check lands, slow lands, bounce lands,
+// etc — uses "enters tapped" somewhere in its oracle text, so this is reliable regardless
+// of which specific cycle a card belongs to. Falls back to a small name-keyword list only
+// for the rare case where we don't have card data yet (e.g. before Scryfall data loads).
+function isTappedLand(name, cardData) {
+  const d = cardData && (cardData[name.toLowerCase()] || cardData[name.split(' // ')[0].toLowerCase().trim()]);
+  if (d && d.oracle_text) return d.oracle_text.toLowerCase().includes('enters tapped');
+  const basics = ['swamp', 'island', 'mountain', 'forest', 'plains'];
+  if (basics.includes(name.toLowerCase())) return false;
+  const fallbackKeywords = ['guildgate', 'temple of', 'tribal land', 'refuge', 'karoo'];
+  return fallbackKeywords.some(k => name.toLowerCase().includes(k));
 }
 
 window.TM = {
