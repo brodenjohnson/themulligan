@@ -1477,7 +1477,7 @@ async function runRecommendations() {
 Win condition: ${state.wincon || 'Not specified yet — infer the most likely win condition purely from the actual decklist below'}
 Theme: ${state.theme || 'none'}
 Power level: ${state.powerLevel}/5
-Current deck (first 30): ${state.cards.slice(0, 30).join(', ')}
+FULL current decklist (${state.cards.length} cards — do not suggest ANY of these, they are already in the deck): ${state.cards.join(', ')}
 ${recSuggestions}
 ${ownedListBlock}
 
@@ -1486,13 +1486,14 @@ Based on this deck's strategy, do three things:
 2. Pick up to 8 themed alternatives${state.theme ? ` for theme: ${state.theme}` : ''}.
 3. From the OWNED CARDS LIST only, pick up to 8 cards that would genuinely improve this deck.
 Prioritise cards that support the win condition.
-CRITICAL: Only suggest cards that are REAL, printed Magic: The Gathering cards. Do not invent card names, even ones that sound plausible for the theme. For the "collection" section, only pick names that appear verbatim in the OWNED CARDS LIST.
+For EVERY recommendation, also name ONE specific card currently in the FULL decklist above that it should replace — pick the weakest or most redundant card for that particular upgrade, using its EXACT name as it appears in the decklist. Never suggest cutting the commander.
+CRITICAL: Only suggest cards that are REAL, printed Magic: The Gathering cards, and NEVER suggest a card that already appears in the FULL current decklist above. Do not invent card names, even ones that sound plausible for the theme. For the "collection" section, only pick names that appear verbatim in the OWNED CARDS LIST.
 Return JSON only, no markdown:
-{"best":[{"name":"Card","reason":"one sentence why it fits","cmc":"2","type":"Creature"}],"themed":[{"name":"Card","reason":"one sentence","trade_off":"brief note on power vs theme trade-off"}],"collection":[{"name":"Card","reason":"one sentence why it fits, picked from OWNED CARDS LIST only"}]}`;
+{"best":[{"name":"Card","reason":"one sentence why it fits","cmc":"2","type":"Creature","swap_for":"Exact Name Of Existing Card To Cut"}],"themed":[{"name":"Card","reason":"one sentence","trade_off":"brief note on power vs theme trade-off","swap_for":"Exact Name Of Existing Card To Cut"}],"collection":[{"name":"Card","reason":"one sentence why it fits, picked from OWNED CARDS LIST only","swap_for":"Exact Name Of Existing Card To Cut"}]}`;
     const aiData = await safeFetchJson('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 3000,
-        system: 'You are an MTG deck advisor with deep, accurate knowledge of real printed Magic: The Gathering cards. You never invent or hallucinate card names. Return only valid JSON, no markdown.',
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 3500,
+        system: 'You are an MTG deck advisor with deep, accurate knowledge of real printed Magic: The Gathering cards. You never invent or hallucinate card names, and you never suggest a card that is already in the decklist you were given. Return only valid JSON, no markdown.',
         messages: [{ role: 'user', content: prompt }] }),
     });
     const raw = aiData.content?.[0]?.text || '{}';
@@ -1509,28 +1510,51 @@ Return JSON only, no markdown:
     function isVerified(name) {
       return !!(verifiedData[name.toLowerCase()] || verifiedData[name.split(' // ')[0].toLowerCase().trim()]);
     }
+    // Hard backstop: never show a "recommendation" that's already in the deck, no matter
+    // what the AI returned. Front-face-normalized so DFCs match correctly either way.
+    const deckCardsLowerForFilter = new Set(state.cards.map(c => c.split(' // ')[0].toLowerCase().trim()));
+    function notAlreadyInDeck(name) {
+      return !deckCardsLowerForFilter.has(name.split(' // ')[0].toLowerCase().trim());
+    }
+    // A swap_for suggestion is only shown if it's an exact match to something really in
+    // the deck (and isn't the commander) — otherwise we just drop the swap note, not the
+    // whole recommendation, since the add itself is still valid even without a clean cut.
+    function attachValidSwap(r) {
+      if (!r.swap_for) return r;
+      const swapKey = r.swap_for.split(' // ')[0].toLowerCase().trim();
+      const commanderKey = state.cards[0].split(' // ')[0].toLowerCase().trim();
+      const match = state.cards.find(c => c.split(' // ')[0].toLowerCase().trim() === swapKey);
+      if (match && swapKey !== commanderKey) return { ...r, swap_for: match };
+      return { ...r, swap_for: null };
+    }
     const ownedNotInDeckLowerSet = new Set(ownedNotInDeckAll.map(n => n.toLowerCase()));
-    const verifiedBest = (parsed.best || []).filter(r => isVerified(r.name));
-    const verifiedThemed = (parsed.themed || []).filter(r => isVerified(r.name));
+    const verifiedBest = (parsed.best || []).filter(r => isVerified(r.name) && notAlreadyInDeck(r.name)).map(attachValidSwap);
+    const verifiedThemed = (parsed.themed || []).filter(r => isVerified(r.name) && notAlreadyInDeck(r.name)).map(attachValidSwap);
     // Double safety: collection picks must both be verified real cards AND actually appear in the owned list.
-    const verifiedCollection = (parsed.collection || []).filter(r => isVerified(r.name) && ownedNotInDeckLowerSet.has(r.name.toLowerCase()));
+    const verifiedCollection = (parsed.collection || []).filter(r => isVerified(r.name) && notAlreadyInDeck(r.name) && ownedNotInDeckLowerSet.has(r.name.toLowerCase())).map(attachValidSwap);
     const droppedCount = allRecNames.length - verifiedBest.length - verifiedThemed.length - verifiedCollection.length;
 
     function recCard(r, mode) {
       const owned = mode === 'collection' ? true : state.collection.has(r.name.toLowerCase());
       const d = verifiedData[r.name.toLowerCase()] || verifiedData[r.name.split(' // ')[0].toLowerCase().trim()];
       const img = d?.image_uris?.normal || d?.image_uris?.small || '';
-      return `<div class="rec-card" onclick="openCardModal('${r.name.replace(/'/g,"\'")}')" style="cursor:pointer;">
-        <div class="rec-thumb">${img ? `<img src="${img}" alt="${r.name}">` : r.name.split(',')[0]}</div>
-        <div style="flex:1;">
-          <div style="font-size:13px;font-weight:600;color:var(--black);margin-bottom:3px;">${r.name}</div>
-          <div style="font-size:11px;color:var(--ink3);line-height:1.4;margin-bottom:5px;">${r.reason}</div>
-          ${mode === 'themed' && r.trade_off ? `<div style="font-size:10px;color:var(--ink4);font-style:italic;margin-bottom:4px;">${r.trade_off}</div>` : ''}
-          <div style="display:flex;gap:5px;flex-wrap:wrap;">
-            <span class="${owned ? 'badge badge-own' : 'badge badge-buy'}">${owned ? '✓ Own it' : state.collection.size > 0 ? '✗ Need to buy' : 'Collection?'}</span>
-            ${r.cmc && r.cmc !== '?' ? `<span class="badge badge-neutral">CMC ${r.cmc}</span>` : ''}
+      return `<div class="rec-card" style="flex-direction:column;">
+        <div style="display:flex;gap:10px;cursor:pointer;" onclick="openCardModal('${r.name.replace(/'/g,"\\'")}')">
+          <div class="rec-thumb">${img ? `<img src="${img}" alt="${r.name}">` : r.name.split(',')[0]}</div>
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:600;color:var(--black);margin-bottom:3px;">${r.name}</div>
+            <div style="font-size:11px;color:var(--ink3);line-height:1.4;margin-bottom:5px;">${r.reason}</div>
+            ${mode === 'themed' && r.trade_off ? `<div style="font-size:10px;color:var(--ink4);font-style:italic;margin-bottom:4px;">${r.trade_off}</div>` : ''}
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+              <span class="${owned ? 'badge badge-own' : 'badge badge-buy'}">${owned ? '✓ Own it' : state.collection.size > 0 ? '✗ Need to buy' : 'Collection?'}</span>
+              ${r.cmc && r.cmc !== '?' ? `<span class="badge badge-neutral">CMC ${r.cmc}</span>` : ''}
+            </div>
           </div>
         </div>
+        ${r.swap_for ? `<div style="display:flex;align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:0.5px solid var(--bg);font-size:11px;color:var(--ink3);">
+          <span style="color:var(--pink);">↔ Swap out:</span>
+          <span style="color:var(--ink2);text-decoration:underline;text-decoration-style:dotted;cursor:pointer;" onclick="event.stopPropagation();openCardModal('${r.swap_for.replace(/'/g,"\\'")}')">${r.swap_for}</span>
+        </div>` : ''}
       </div>`;
     }
     container.innerHTML = `
@@ -1558,9 +1582,9 @@ Return JSON only, no markdown:
       </div>`;
     attachRefreshHandlers();
     state.recsSummary = {
-      best: verifiedBest.map(r => `${r.name} (${state.collection.has(r.name.toLowerCase()) ? 'owned' : 'need to buy'}): ${r.reason}`),
-      themed: verifiedThemed.map(r => `${r.name} (${state.collection.has(r.name.toLowerCase()) ? 'owned' : 'need to buy'}): ${r.reason}${r.trade_off ? ' — trade-off: ' + r.trade_off : ''}`),
-      collection: verifiedCollection.map(r => `${r.name} (already owned, sitting in bulk): ${r.reason}`),
+      best: verifiedBest.map(r => `${r.name} (${state.collection.has(r.name.toLowerCase()) ? 'owned' : 'need to buy'}): ${r.reason}${r.swap_for ? ` [suggested cut to make room: ${r.swap_for}]` : ''}`),
+      themed: verifiedThemed.map(r => `${r.name} (${state.collection.has(r.name.toLowerCase()) ? 'owned' : 'need to buy'}): ${r.reason}${r.trade_off ? ' — trade-off: ' + r.trade_off : ''}${r.swap_for ? ` [suggested cut to make room: ${r.swap_for}]` : ''}`),
+      collection: verifiedCollection.map(r => `${r.name} (already owned, sitting in bulk): ${r.reason}${r.swap_for ? ` [suggested cut to make room: ${r.swap_for}]` : ''}`),
     };
     setDeckCache({ recsHtml: container.innerHTML, recsSummary: state.recsSummary });
   } catch (e) {
