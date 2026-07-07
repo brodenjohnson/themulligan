@@ -185,6 +185,28 @@
   .bm-pile.healthy .bm-pile-badge { background: var(--teal); color: #061716; }
   .bm-footnote { text-align: center; margin-top: 18px; font-size: 11px; color: rgba(255,255,255,0.35); }
   .bm-footnote strong { color: var(--pink); }
+
+  .bm-pack-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; max-width: 900px; margin: 20px auto 0; }
+  .bm-pack-card-img { aspect-ratio: 5/7; border-radius: 9px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.12); position: relative; margin-bottom: 6px; cursor: pointer; transition: transform 0.15s; }
+  .bm-pack-card-img:hover { transform: translateY(-3px); }
+  .bm-pack-card-img img { width: 100%; height: 100%; object-fit: cover; }
+  .bm-pack-card-img.decided img { opacity: 0.3; }
+  .bm-pack-decided-tag { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; background: rgba(0,0,0,0.55); z-index: 2; text-align: center; padding: 6px; }
+  .bm-undo-btn { position: absolute; bottom: 5px; right: 5px; background: rgba(255,255,255,0.2); color: #fff; font-size: 8px; padding: 3px 6px; border-radius: 5px; cursor: pointer; z-index: 3; }
+  .bm-pack-owned { position: absolute; top: 5px; left: 5px; width: 15px; height: 15px; border-radius: 50%; background: var(--teal); display: flex; align-items: center; justify-content: center; font-size: 8px; color: #061716; font-weight: 900; }
+  .bm-pack-score { position: absolute; top: 5px; right: 5px; background: rgba(0,212,204,0.9); color: #061716; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 8px; }
+  .bm-pack-actions { display: flex; gap: 4px; }
+  .bm-pack-action { flex: 1; padding: 6px 0; border-radius: 6px; font-size: 9px; font-weight: 700; text-align: center; cursor: pointer; border: none; }
+  .bm-pack-action.selected { outline: 2px solid #fff; }
+  .bm-pack-action.keep { background: var(--teal); color: #061716; }
+  .bm-pack-action.discard { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5); }
+  .bm-pack-action.side { background: rgba(245,166,35,0.18); color: var(--orange); }
+  .bm-flat-btn { border: none; padding: 10px 18px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .bm-flat-btn.reroll { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
+  .bm-flat-btn.continue { background: linear-gradient(90deg, var(--teal), #00b8b0); color: #061716; }
+  .bm-sb-mini { width: 28px; height: 38px; border-radius: 5px; background: #241c0f; border: 1px solid rgba(245,166,35,0.3); margin-left: -16px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 6px; color: rgba(255,255,255,0.4); text-align: center; padding: 2px; }
+  .bm-sb-mini:first-child { margin-left: 0; }
+  .bm-sb-mini:hover { transform: translateY(-6px); z-index: 5; }
 </style>
 </head>
 <body>
@@ -628,12 +650,16 @@ function switchTab(tab) {
 }
 
 // ===== BUILD MODE =====
-let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set() };
+// Everything here operates on bmState.draftCards — a COPY of the real decklist — not
+// state.cards directly. Nothing touches your actual saved deck until a real Lock In step
+// exists, so you can freely experiment (swap cards, open packs, reroll) without any risk
+// to the live deck. Exiting Build Mode without locking in simply discards the draft.
+let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {} };
 
 function bmClassifyCard(name) {
   const d = cardLookup(name);
   const text = (d?.oracle_text || name).toLowerCase();
-  if (name === state.cards[0]) return null; // commander doesn't go in a pile
+  if (name === bmState.draftCards[0]) return null;
   if (TM.isLand(name, state.cardData)) return 'lands';
   const rampWords = ['sol ring','arcane signet','chromatic lantern','mind stone','talisman','signet','cultivate','kodama','rampant','farseek','commander\'s sphere','add {c}','add one mana','search your library for a land'];
   if (rampWords.some(k => text.includes(k))) return 'ramp';
@@ -641,7 +667,6 @@ function bmClassifyCard(name) {
   if (drawWords.some(k => text.includes(k))) return 'draw';
   const removalWords = ['destroy target','exile target','counter target','damage to any target','damage to target','-x/-x','return target'];
   if (removalWords.some(k => text.includes(k))) return 'removal';
-  // Win conditions: anything that's part of a complete combo we already detected
   const inCombo = (state.combosSummary?.complete || []).some(c => c.toLowerCase().includes(name.toLowerCase()));
   if (inCombo) return 'wincons';
   return 'synergy';
@@ -656,7 +681,7 @@ function bmBuildPiles() {
     wincons: { label: 'Win conditions', cards: [], target: 3 },
     lands: { label: 'Lands', cards: [], target: 37 },
   };
-  state.cards.forEach(name => {
+  bmState.draftCards.forEach(name => {
     const cat = bmClassifyCard(name);
     if (cat && piles[cat]) piles[cat].cards.push(name);
   });
@@ -665,6 +690,9 @@ function bmBuildPiles() {
 
 async function enterBuildMode() {
   document.getElementById('buildModeScreen').classList.add('open');
+  bmState.draftCards = [...state.cards]; // fresh copy every time you enter
+  bmState.sideboard = [];
+  bmState.currentPack = null;
   bmState.piles = bmBuildPiles();
   renderBmMain();
   bmState.gameChangers = await TM.getGameChangersList();
@@ -672,19 +700,21 @@ async function enterBuildMode() {
 }
 
 function exitBuildMode() {
+  if (bmState.draftCards.length !== state.cards.length || bmState.sideboard.length > 0) {
+    if (!confirm('You have unsaved changes in Build Mode. Exit without locking in? Everything here will be discarded.')) return;
+  }
   document.getElementById('buildModeScreen').classList.remove('open');
 }
 
 function bmSynergyScore() {
   const complete = (state.combosSummary?.complete || []).length;
-  const nonLand = state.cards.filter(c => !TM.isLand(c, state.cardData)).length;
+  const nonLand = bmState.draftCards.filter(c => !TM.isLand(c, state.cardData)).length;
   const synergySize = bmState.piles?.synergy?.cards.length || 0;
-  const score = Math.min(100, Math.round(complete * 20 + (nonLand > 0 ? (synergySize / nonLand) * 100 * 0.5 : 0)));
-  return score;
+  return Math.min(100, Math.round(complete * 20 + (nonLand > 0 ? (synergySize / nonLand) * 100 * 0.5 : 0)));
 }
 
 function bmGameChangerCount() {
-  return state.cards.filter(c => bmState.gameChangers.has(c.split(' // ')[0].toLowerCase().trim())).length;
+  return bmState.draftCards.filter(c => bmState.gameChangers.has(c.split(' // ')[0].toLowerCase().trim())).length;
 }
 
 function bmGameChangerLimit() {
@@ -696,7 +726,7 @@ function bmGameChangerLimit() {
 
 function bmCardTypeCounts() {
   const counts = { Creatures: 0, Instants: 0, Sorceries: 0, Artifacts: 0, Enchantments: 0, Planeswalkers: 0, Lands: 0 };
-  state.cards.forEach(name => {
+  bmState.draftCards.forEach(name => {
     const d = cardLookup(name);
     const t = d?.type_line || '';
     if (t.includes('Land')) counts.Lands++;
@@ -722,8 +752,8 @@ function renderBmHud() {
   const gcLimit = bmGameChangerLimit();
   const gcClass = gcLimit === Infinity ? 'ok' : gcCount > gcLimit ? 'danger' : 'ok';
   const typeCounts = bmCardTypeCounts();
-  const totalPrice = state.cards.reduce((sum, c) => sum + parseFloat(cardLookup(c)?.prices?.usd || 0), 0);
-  const ownedPrice = state.cards.reduce((sum, c) => sum + (isOwnedCard(c) ? parseFloat(cardLookup(c)?.prices?.usd || 0) : 0), 0);
+  const totalPrice = bmState.draftCards.reduce((sum, c) => sum + parseFloat(cardLookup(c)?.prices?.usd || 0), 0);
+  const ownedPrice = bmState.draftCards.reduce((sum, c) => sum + (isOwnedCard(c) ? parseFloat(cardLookup(c)?.prices?.usd || 0) : 0), 0);
   const ramp = bmState.piles.ramp, removal = bmState.piles.removal;
 
   const combosHtml = (state.combosSummary?.complete?.length || state.combosSummary?.oneAway?.length)
@@ -736,13 +766,17 @@ function renderBmHud() {
        }).join('')}`
     : `<div class="bm-combo-line">No combos detected yet.</div>`;
 
+  const sideboardHtml = bmState.sideboard.length > 0
+    ? `<div style="display:flex;">${bmState.sideboard.map((c,i) => `<div class="bm-sb-mini" title="${c.name}" onclick="bmReturnFromSideboard(${i})">${c.name.split(' ')[0]}</div>`).join('')}</div>`
+    : `<div style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:6px 0;">Empty</div>`;
+
   document.getElementById('bmHud').innerHTML = `
     <div class="bm-exit" onclick="exitBuildMode()"><i class="ti ti-arrow-left" aria-hidden="true"></i> Exit Build Mode</div>
     <div>
-      <div class="bm-deck-name">${state.deck?.name || state.cards[0]}</div>
+      <div class="bm-deck-name">${state.deck?.name || bmState.draftCards[0]}</div>
       <div class="bm-deck-sub">${getCommanderColorIdentity().join('') || 'C'} · Bracket ${state.powerLevel || 3}</div>
-      <div class="bm-progress-label" style="margin-top:8px;"><span>Deck progress</span><span>${state.cards.length} / 100</span></div>
-      <div class="bm-progress-track"><div class="bm-progress-fill" style="width:${Math.min(100,state.cards.length)}%;"></div></div>
+      <div class="bm-progress-label" style="margin-top:8px;"><span>Deck progress</span><span>${bmState.draftCards.length} / 100</span></div>
+      <div class="bm-progress-track"><div class="bm-progress-fill" style="width:${Math.min(100,bmState.draftCards.length)}%;"></div></div>
     </div>
     <div class="bm-synergy">
       <div class="bm-synergy-label"><i class="ti ti-sparkles" aria-hidden="true"></i> Synergy meter</div>
@@ -762,6 +796,10 @@ function renderBmHud() {
       <div class="bm-accordion-header" onclick="bmToggleAccordion('types')"><span><i class="ti ti-cards" aria-hidden="true"></i> Card types</span><span class="bm-accordion-chevron">⌄</span></div>
       <div class="bm-accordion-body">${Object.entries(typeCounts).map(([k,v]) => `<div class="bm-type-row"><span>${k}</span><span>${v}</span></div>`).join('')}</div>
     </div>
+    <div class="bm-accordion open">
+      <div class="bm-accordion-header" style="color:var(--orange);"><span><i class="ti ti-layers-subtract" aria-hidden="true"></i> Sideboard (${bmState.sideboard.length})</span></div>
+      <div class="bm-accordion-body">${sideboardHtml}</div>
+    </div>
     <div class="bm-price">
       <div><div class="bm-price-value">$${totalPrice.toFixed(0)}</div><div class="bm-price-sub">$${ownedPrice.toFixed(0)} already owned</div></div>
       <i class="ti ti-currency-dollar" style="color:rgba(255,255,255,0.3);font-size:18px;" aria-hidden="true"></i>
@@ -770,7 +808,17 @@ function renderBmHud() {
   `;
 }
 
+function bmReturnFromSideboard(i) {
+  const card = bmState.sideboard[i];
+  bmState.sideboard.splice(i, 1);
+  bmState.draftCards.push(card.name);
+  bmState.piles = bmBuildPiles();
+  renderBmMain();
+  renderBmHud();
+}
+
 function renderBmMain() {
+  if (bmState.currentPack) { renderBmPack(); return; }
   const piles = bmState.piles;
   const orderedKeys = ['ramp','draw','removal','synergy','wincons','lands'];
   const pileHtml = orderedKeys.map(key => {
@@ -778,7 +826,7 @@ function renderBmMain() {
     const healthy = pile.cards.length >= pile.target;
     const glow = !healthy && key !== 'lands';
     const cardsToShow = pile.cards.slice(0, 3);
-    return `<div class="bm-pile ${glow ? 'glowing' : ''} ${healthy ? 'healthy' : ''}">
+    return `<div class="bm-pile ${glow ? 'glowing' : ''} ${healthy ? 'healthy' : ''}" onclick="bmOpenPack('${key}')">
       <div class="bm-pile-label-row"><span class="bm-pile-label">${pile.label}</span><span class="bm-pile-count">${pile.cards.length}</span></div>
       <div class="bm-pile-stack">
         ${cardsToShow.map((c,i) => {
@@ -793,12 +841,135 @@ function renderBmMain() {
 
   document.getElementById('bmMain').innerHTML = `
     <div class="bm-main-header">
-      <div class="bm-commander-name">✦ ${state.cards[0]}</div>
-      <div class="bm-commander-sub">Your cards laid out by role — piles still needing work are glowing</div>
+      <div class="bm-commander-name">✦ ${bmState.draftCards[0]}</div>
+      <div class="bm-commander-sub">Tap any pile to open a pack for that role — lands unlock once you're closer to 100 cards</div>
     </div>
     <div class="bm-pile-row">${pileHtml}</div>
-    <div class="bm-footnote">Build order: <strong>ramp → draw → removal → synergy → win-cons → lands</strong>. Pack opening, sideboard, and lock-in are coming in the next update.</div>
+    <div class="bm-footnote">Build order: <strong>ramp → draw → removal → synergy → win-cons → lands</strong>. Drag/drop and lock-in are coming next.</div>
   `;
+}
+
+/* ===== PACK GENERATION ===== */
+async function bmOpenPack(pileKey) {
+  const pile = bmState.piles[pileKey];
+  if (pileKey === 'lands') {
+    alert('Land packs unlock once your deck is closer to 100 cards — lands are always the last step.');
+    return;
+  }
+  bmState.packCategory = pileKey;
+  bmState.packDecisions = {};
+  document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:rgba(255,255,255,0.5);"><span class="spinner" style="margin-right:10px;"></span> Opening a pack for ${pile.label}...</div>`;
+  bmState.currentPack = await bmGeneratePack(pileKey);
+  renderBmMain();
+}
+
+async function bmGeneratePack(pileKey) {
+  const pile = bmState.piles[pileKey];
+  const commanderColors = getCommanderColorIdentity();
+  const guildName = TM.getGuildName(commanderColors) || commanderColors.join('') || 'Colourless';
+  const deckCardsLower = new Set(bmState.draftCards.map(c => c.split(' // ')[0].toLowerCase().trim()));
+
+  const ownedRaw = [...new Set(state.collectionRaw.map(c => c.name).filter(n => n && !['swamp','island','mountain','forest','plains'].includes(n.toLowerCase())))]
+    .filter(n => !deckCardsLower.has(n.split(' // ')[0].toLowerCase().trim()));
+  const colorData = await TM.getColorIdentities(ownedRaw);
+  const ownedFiltered = TM.filterByColorIdentity(ownedRaw, commanderColors, colorData);
+
+  const prompt = `Commander deck: "${bmState.draftCards[0].split(' // ')[0]}"
+Colour identity: ${guildName}
+Current decklist (${bmState.draftCards.length} cards — never suggest any of these): ${bmState.draftCards.join(', ')}
+Owned cards not in this deck (colour-filtered): ${ownedFiltered.slice(0, 300).join(', ') || 'none tracked'}
+
+This deck's "${pile.label}" pile currently has ${pile.cards.length} cards and needs roughly ${Math.max(0, pile.target - pile.cards.length)} more to be healthy.
+Suggest exactly 10 real, verified Magic: The Gathering cards that fill the "${pile.label}" role specifically for this deck, in ${guildName} colours only.
+CRITICAL: Only real printed cards. Never suggest anything already in the current decklist.
+Return JSON only, no markdown:
+{"cards":[{"name":"Card","reason":"one short sentence","score":85}]}`;
+
+  const data = await safeFetchJson('/api/chat', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1200,
+      system: 'You are an MTG deck-building expert. You never invent or hallucinate card names. Return only valid JSON, no markdown.',
+      messages: [{ role: 'user', content: prompt }] }),
+  });
+  const raw = data.content?.[0]?.text || '{}';
+  const parsed = safeParseAIJson(raw);
+  const candidates = (parsed.cards || []).filter(c => !deckCardsLower.has(c.name.split(' // ')[0].toLowerCase().trim()));
+
+  const names = candidates.map(c => c.name);
+  const verifiedData = names.length > 0 ? await TM.fetchScryfallBulk(names) : {};
+  Object.assign(state.cardData, verifiedData);
+  const ownedFilteredLower = new Set(ownedFiltered.map(n => n.toLowerCase()));
+  const verified = candidates.filter(c => verifiedData[c.name.toLowerCase()] || verifiedData[c.name.split(' // ')[0].toLowerCase().trim()]);
+
+  return verified.slice(0, 10).map(c => ({ ...c, owned: state.collection.has(c.name.toLowerCase()) || ownedFilteredLower.has(c.name.toLowerCase()) }));
+}
+
+function renderBmPack() {
+  const pile = bmState.piles[bmState.packCategory];
+  const cardsHtml = bmState.currentPack.map((c, i) => {
+    const decision = bmState.packDecisions[i];
+    const decided = !!decision;
+    const d = cardLookup(c.name);
+    const img = d?.image_uris?.normal || '';
+    const tagText = decision === 'keep' ? 'KEPT' : decision === 'discard' ? 'DISCARDED' : decision === 'sideboard' ? 'SIDEBOARDED' : '';
+    return `<div class="bm-pack-card">
+      <div class="bm-pack-card-img ${decided ? 'decided' : ''}" onclick="openCardModal('${c.name.replace(/'/g,"\\'")}')">
+        ${img ? `<img src="${img}" alt="${c.name}">` : c.name}
+        ${decided ? `<div class="bm-pack-decided-tag">${tagText}</div><div class="bm-undo-btn" onclick="event.stopPropagation();bmUndoDecision(${i})">Undo</div>` : ''}
+        ${c.owned ? `<div class="bm-pack-owned">✓</div>` : ''}
+        <div class="bm-pack-score">${c.score || '?'}</div>
+      </div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.5);text-align:center;margin-bottom:6px;height:26px;overflow:hidden;">${c.reason || ''}</div>
+      <div class="bm-pack-actions">
+        <button class="bm-pack-action keep ${decision==='keep'?'selected':''}" onclick="bmDecide(${i}, 'keep')">Keep</button>
+        <button class="bm-pack-action side ${decision==='sideboard'?'selected':''}" onclick="bmDecide(${i}, 'sideboard')">Side</button>
+        <button class="bm-pack-action discard ${decision==='discard'?'selected':''}" onclick="bmDecide(${i}, 'discard')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('bmMain').innerHTML = `
+    <div class="bm-main-header" style="text-align:center;">
+      <div class="bm-commander-name">Opening a pack for <span style="color:var(--pink);">${pile.label}</span></div>
+      <div class="bm-commander-sub">Keep what fits, Discard what doesn't, Sideboard anything you're unsure about</div>
+    </div>
+    <div class="bm-pack-grid">${cardsHtml}</div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:20px;">
+      <button class="bm-flat-btn reroll" onclick="bmRerollPack()"><i class="ti ti-refresh" aria-hidden="true"></i> Reroll this pack</button>
+      <button class="bm-flat-btn continue" onclick="bmApplyPack()">Continue →</button>
+    </div>
+  `;
+}
+
+function bmDecide(i, action) {
+  bmState.packDecisions[i] = bmState.packDecisions[i] === action ? undefined : action;
+  renderBmPack();
+}
+
+function bmUndoDecision(i) {
+  delete bmState.packDecisions[i];
+  renderBmPack();
+}
+
+async function bmRerollPack() {
+  document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:rgba(255,255,255,0.5);"><span class="spinner" style="margin-right:10px;"></span> Rerolling...</div>`;
+  bmState.currentPack = await bmGeneratePack(bmState.packCategory);
+  bmState.packDecisions = {};
+  renderBmMain();
+}
+
+function bmApplyPack() {
+  let kept = 0, sideboarded = 0;
+  bmState.currentPack.forEach((c, i) => {
+    const decision = bmState.packDecisions[i];
+    if (decision === 'keep') { bmState.draftCards.push(c.name); kept++; }
+    else if (decision === 'sideboard') { bmState.sideboard.push({ name: c.name, from: bmState.packCategory }); sideboarded++; }
+  });
+  bmState.currentPack = null;
+  bmState.packCategory = null;
+  bmState.piles = bmBuildPiles();
+  renderBmMain();
+  renderBmHud();
 }
 
 function switchTabWithFocus(tab, focus) {
