@@ -135,6 +135,10 @@
       <option value="price-desc">Sort: price high to low</option>
       <option value="price-asc">Sort: price low to high</option>
     </select>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);cursor:pointer;white-space:nowrap;">
+      <input type="checkbox" id="showBasicsToggle" onchange="applyFilters()" style="width:auto;">
+      Show basic lands
+    </label>
     <div style="margin-left:auto;display:flex;gap:4px;">
       <div class="view-btn active" id="vbList" onclick="setView('list')" title="List view"><i class="ti ti-list" aria-hidden="true"></i></div>
       <div class="view-btn" id="vbGrid" onclick="setView('grid')" title="Grid view"><i class="ti ti-layout-grid" aria-hidden="true"></i></div>
@@ -326,14 +330,22 @@ function getCardPrice(name) {
   return typeof price === 'number' ? price : -1; // unknown prices sort to the bottom
 }
 
+function isBasicLand(name) {
+  const basics = ['swamp', 'island', 'mountain', 'forest', 'plains', 'wastes',
+    'snow-covered swamp', 'snow-covered island', 'snow-covered mountain', 'snow-covered forest', 'snow-covered plains', 'snow-covered wastes'];
+  return basics.includes((name || '').split(' // ')[0].toLowerCase().trim());
+}
+
 function applyFilters() {
   const search = document.getElementById('searchInput').value.toLowerCase().trim();
   const locFilter = document.getElementById('filterLocation').value;
   const deckFilter = document.getElementById('filterDeck').value;
   const sortBy = document.getElementById('sortBy').value;
+  const showBasics = document.getElementById('showBasicsToggle').checked;
 
   let cards = state.uniqueCards.map(k => state.lookup[k]);
 
+  if (!showBasics) cards = cards.filter(c => !isBasicLand(c.name));
   if (search) cards = cards.filter(c => c.name.toLowerCase().includes(search));
   if (locFilter === 'bulk') cards = cards.filter(c => c.bulk > 0);
   if (locFilter === 'decks') cards = cards.filter(c => Object.keys(c.decks).length > 0);
