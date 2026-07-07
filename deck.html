@@ -62,7 +62,14 @@
   .mana-card-title { font-size: 12px; font-weight: 600; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
   .health-ring-wrap { position: relative; width: 64px; height: 64px; flex-shrink: 0; }
   .health-ring-score { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; color: var(--black); }
-  .land-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 0.5px solid var(--bg); }
+  .land-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid var(--bg); }
+  .mana-land-thumb { width: 56px; aspect-ratio: 5/7; border-radius: 5px; overflow: hidden; cursor: pointer; background: var(--border); border: 0.5px solid var(--border2); flex-shrink: 0; transition: border-color 0.15s; }
+  .mana-land-thumb:hover { border-color: var(--teal); }
+  .mana-land-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .mana-land-thumb-sm { width: 42px; aspect-ratio: 5/7; border-radius: 4px; overflow: hidden; cursor: pointer; background: var(--border); border: 0.5px solid var(--border2); flex-shrink: 0; transition: border-color 0.15s; }
+  .mana-land-thumb-sm:hover { border-color: var(--teal); }
+  .mana-land-thumb-sm img { width: 100%; height: 100%; object-fit: cover; }
+  .mana-land-thumb-fallback { font-size: 8px; color: var(--ink3); text-align: center; padding: 3px; line-height: 1.2; display: flex; align-items: center; justify-content: center; height: 100%; }
   .land-item:last-child { border-bottom: none; }
   .land-name { font-size: 12px; font-weight: 500; color: var(--black); }
   .land-name-cut { color: var(--pink); }
@@ -401,6 +408,7 @@ let state = {
   recsSummary: null, combosSummary: null,
   combosPromise: null, recsPromise: null,
   selectMode: false, selectedCards: new Set(),
+  intakeAnswered: false,
 };
 
 const CACHE_KEY = `mulligan_cache_v2_${deckId}`;
@@ -433,6 +441,7 @@ async function init() {
     state.wincon = deck.win_con || '';
     state.theme = deck.theme || '';
     state.powerLevel = deck.power_level || 3;
+    state.intakeAnswered = !!(state.wincon || state.theme);
     state.collectionRaw = (collection || []).map(c => typeof c === 'string' ? { name: c, quantity: 1, listedIn: 'Bulk' } : c);
     state.collection = new Set(state.collectionRaw.map(c => (c.name || '').toLowerCase().replace(/\s*\/\/.*$/, '').trim()));
     document.getElementById('deckBanner').style.display = 'flex';
@@ -1018,8 +1027,23 @@ function renderStats() {
   const draw = nonLands.filter(c => drawKeywords.some(k => (state.cardData[c.toLowerCase()]?.oracle_text || c).toLowerCase().includes(k)));
   const interactionKeywords = ['destroy','exile','counter','remove','terminate','swords','path','beast within','chaos warp'];
   const interaction = nonLands.filter(c => interactionKeywords.some(k => (state.cardData[c.toLowerCase()]?.oracle_text || c).toLowerCase().includes(k)));
-  const discardKeywords = ['discard','connive','looting','faithless','rummage'];
-  const discardOutlets = nonLands.filter(c => discardKeywords.some(k => (state.cardData[c.toLowerCase()]?.oracle_text || c).toLowerCase().includes(k)));
+
+  // Instead of always assuming discard is this deck's "engine" (a leftover from the very
+  // first test deck), detect whichever mechanic actually shows up most in THIS decklist.
+  const archetypeKeywordSets = {
+    'Discard/graveyard': ['discard', 'connive', 'looting', 'faithless', 'rummage', 'reanimate'],
+    'Tokens': ['create a', 'token', 'populate'],
+    '+1/+1 counters': ['+1/+1 counter', 'proliferate'],
+    'Sacrifice': ['sacrifice a', 'sacrifice this', 'whenever a creature you control dies'],
+    'Lifegain': ['gain life', 'lifelink'],
+    'Spellslinger': ['instant or sorcery spell', 'copy target spell', 'noncreature spell'],
+    'Artifacts matter': ['artifact you control', 'whenever an artifact', 'metalcraft'],
+  };
+  let bestArchetype = { name: 'Removal package', count: interaction.length };
+  Object.entries(archetypeKeywordSets).forEach(([name, keywords]) => {
+    const count = nonLands.filter(c => keywords.some(k => (state.cardData[c.toLowerCase()]?.oracle_text || '').toLowerCase().includes(k))).length;
+    if (count > bestArchetype.count) bestArchetype = { name, count };
+  });
 
   const curveData = [0,0,0,0,0,0,0];
   const curveSpells = [0,0,0,0,0,0,0];
@@ -1060,7 +1084,7 @@ function renderStats() {
         ${statCard('Ramp pieces', ramp.length, ramp.length < 8 ? '↓ Low (aim 8-12)' : '✓ Healthy', ramp.length < 8 ? 'stat-warn' : 'stat-ok', ramp.length < 8 ? {tab:'recs', label:'See ramp recommendations'} : null)}
         ${statCard('Draw / loot', draw.length, draw.length < 8 ? '↓ Low (aim 8+)' : '✓ Healthy', draw.length < 8 ? 'stat-warn' : 'stat-ok', draw.length < 8 ? {tab:'recs', label:'See draw recommendations'} : null)}
         ${statCard('Interaction', interaction.length, interaction.length < 6 ? '↓ Low (aim 6+)' : '✓ Healthy', interaction.length < 6 ? 'stat-warn' : 'stat-ok')}
-        ${statCard('Discard outlets', discardOutlets.length, 'Core engine pieces', '')}
+        ${statCard(bestArchetype.name, bestArchetype.count, 'Deck\'s detected engine', '')}
         ${statCard('Creatures', creatures.length, `of ${nonLands.length} non-lands`, '')}
       </div>
     </div>
@@ -1105,8 +1129,8 @@ function renderManaBase() {
   const cards = state.cards;
   const lands = cards.filter(c => TM.isLand(c, state.cardData));
   const nonLands = cards.filter(c => !TM.isLand(c, state.cardData));
-  const tapped = lands.filter(TM.isTappedLand);
-  const untapped = lands.filter(c => !TM.isTappedLand(c));
+  const tapped = lands.filter(c => TM.isTappedLand(c, state.cardData));
+  const untapped = lands.filter(c => !TM.isTappedLand(c, state.cardData));
   const tappedPct = Math.round((tapped.length / Math.max(lands.length, 1)) * 100);
   const untappedPct = 100 - tappedPct;
   const pips = TM.countPips(nonLands, state.cardData);
@@ -1184,7 +1208,17 @@ function renderManaBase() {
             <div class="tapped-track"><div class="tapped-fill" style="width:${tappedPct}%;background:${tappedPct > 40 ? 'var(--orange)' : 'var(--border2)'};"></div></div>
             <div class="tapped-pct">${tapped.length} (${tappedPct}%)</div>
           </div>
-          <div style="font-size:11px;color:var(--ink3);margin-top:6px;">Tapped: ${tapped.slice(0,4).map(c=>c.split(',')[0]).join(', ')}${tapped.length > 4 ? ` +${tapped.length - 4} more` : ''}</div>
+          <div style="font-size:11px;color:var(--ink3);margin:8px 0 6px;">${tapped.length} land${tapped.length !== 1 ? 's' : ''} enter tapped:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            ${tapped.slice(0, 12).map(name => {
+              const d = state.cardData[name.toLowerCase()] || state.cardData[name.split(' // ')[0].toLowerCase().trim()];
+              const img = d?.image_uris?.normal || '';
+              return `<div class="mana-land-thumb" onclick="openCardModal('${name.replace(/'/g,"\\'")}')" title="${name}">
+                ${img ? `<img src="${img}" alt="${name}">` : `<div class="mana-land-thumb-fallback">${name.split(' // ')[0]}</div>`}
+              </div>`;
+            }).join('')}
+            ${tapped.length > 12 ? `<div style="display:flex;align-items:center;font-size:11px;color:var(--ink3);padding:0 4px;">+${tapped.length - 12} more</div>` : ''}
+          </div>
         </div>
         <div class="mana-card">
           <div class="mana-card-title">Colour pip density</div>
@@ -1208,16 +1242,18 @@ function renderManaBase() {
 
 async function fetchManaRecs(lands, tappedLands) {
   try {
+    const commanderColors = getCommanderColorIdentity();
+    const guildName = TM.getGuildName(commanderColors) || commanderColors.map(c => TM.COLOR_NAMES[c]).join('/') || 'Colourless';
     const prompt = `Analyse this Commander deck's mana base:
 Commander: ${state.cards[0]}
-Colour identity: Grixis (UBR) or based on commander
+Colour identity: ${guildName} (${commanderColors.join('') || 'C'})
 Current lands (${lands.length} total): ${lands.join(', ')}
 Tapped lands: ${tappedLands.join(', ')}
-Win condition: ${state.wincon || 'discard/value'}
+Win condition: ${state.wincon || 'Not specified — infer from the actual decklist'}
 
 Return JSON only:
 {"add":[{"name":"Land Name","reason":"one line why"}],"cut":[{"name":"Land Name","reason":"one line why"}]}
-Top 5 adds, top 3 cuts. Prioritise untapped dual lands. Flag if user likely owns it based on being in Doom precon.`;
+Top 5 adds (must produce mana within ${guildName} colours only), top 3 cuts. Prioritise untapped dual/multi lands.`;
     const data = await safeFetchJson('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 600,
@@ -1226,11 +1262,18 @@ Top 5 adds, top 3 cuts. Prioritise untapped dual lands. Flag if user likely owns
     });
     const raw = data.content?.[0]?.text || '{}';
     const parsed = safeParseAIJson(raw);
+    function landThumb(name) {
+      const d = state.cardData[name.toLowerCase()] || state.cardData[name.split(' // ')[0].toLowerCase().trim()];
+      const img = d?.image_uris?.normal || '';
+      return `<div class="mana-land-thumb-sm" onclick="openCardModal('${name.replace(/'/g,"\\'")}')" title="${name}">
+        ${img ? `<img src="${img}" alt="${name}">` : `<div class="mana-land-thumb-fallback" style="font-size:7px;">${name.split(' // ')[0]}</div>`}
+      </div>`;
+    }
     const addHtml = (parsed.add || []).map(l => {
       const owned = state.collection.has(l.name.toLowerCase());
-      return `<div class="land-item"><div><div class="land-name">${l.name}</div><div class="land-reason">${l.reason}</div></div><span class="${owned ? 'badge badge-own' : 'badge badge-buy'}">${owned ? '✓ Own it' : '✗ Buy'}</span></div>`;
+      return `<div class="land-item">${landThumb(l.name)}<div style="flex:1;"><div class="land-name">${l.name}</div><div class="land-reason">${l.reason}</div></div><span class="${owned ? 'badge badge-own' : 'badge badge-buy'}">${owned ? '✓ Own it' : '✗ Buy'}</span></div>`;
     }).join('');
-    const cutHtml = (parsed.cut || []).map(l => `<div class="land-item"><div><div class="land-name land-name-cut">${l.name}</div><div class="land-reason">${l.reason}</div></div></div>`).join('');
+    const cutHtml = (parsed.cut || []).map(l => `<div class="land-item">${landThumb(l.name)}<div style="flex:1;"><div class="land-name land-name-cut">${l.name}</div><div class="land-reason">${l.reason}</div></div></div>`).join('');
     document.getElementById('manaRecsCard').innerHTML = `<div class="mana-card-title">Lands to add</div><div class="land-list">${addHtml || '<div style="font-size:12px;color:var(--ink3);">No specific recommendations.</div>'}</div>`;
     document.getElementById('manaCutsCard').innerHTML = `<div class="mana-card-title">Lands to cut</div><div class="land-list">${cutHtml || '<div style="font-size:12px;color:var(--ink3);">No cuts needed.</div>'}</div>`;
   } catch (e) {
@@ -1268,7 +1311,7 @@ function renderComboCard(combo, missing, ownedNotInDeckLower) {
         const ownsInBulk = isMissing && (state.collection.has(name.toLowerCase()) || (ownedNotInDeckLower && ownedNotInDeckLower.has(name.toLowerCase())));
         const cardObj = (combo.uses || []).find(u => u.card?.name === name)?.card;
         const img = cardObj?.imageUriFrontNormal || state.cardData[name.toLowerCase()]?.image_uris?.normal || '';
-        return `<div class="combo-mtg-thumb ${isMissing ? (ownsInBulk ? 'combo-thumb-owned' : 'combo-thumb-missing') : ''}">
+        return `<div class="combo-mtg-thumb ${isMissing ? (ownsInBulk ? 'combo-thumb-owned' : 'combo-thumb-missing') : ''}" onclick="openCardModal('${name.replace(/'/g,"\\'")}')" style="cursor:pointer;">
           <div class="combo-thumb-img">${img ? `<img src="${img}" alt="${name}" style="width:100%;height:100%;object-fit:cover;">` : name}</div>
           <div class="combo-thumb-name">${name.split(',')[0]}${isMissing ? (ownsInBulk ? ' ✓ own' : ' (missing)') : ''}</div>
         </div>`;
@@ -1431,7 +1474,7 @@ async function runRecommendations() {
       : '\nNo collection data available — skip the "collection" section (return an empty array for it).';
 
     const prompt = `Commander deck: "${state.cards[0].split(' // ')[0]}"
-Win condition: ${state.wincon || 'discard/value/ping with Syr Konrad'}
+Win condition: ${state.wincon || 'Not specified yet — infer the most likely win condition purely from the actual decklist below'}
 Theme: ${state.theme || 'none'}
 Power level: ${state.powerLevel}/5
 Current deck (first 30): ${state.cards.slice(0, 30).join(', ')}
@@ -1660,6 +1703,42 @@ async function startChat() {
   }
 }
 
+async function extractIntakeAnswers(userAnswerText) {
+  try {
+    const extractPrompt = `A Magic: The Gathering deck builder just answered three intake questions (win condition, theme, power level 1-5) for their Commander deck "${state.cards[0]}".
+
+Their answer: "${userAnswerText.replace(/"/g, "'")}"
+
+Extract exactly what they specified. If something wasn't mentioned or they said they're unsure, leave it empty/null — never guess or invent a value.
+Return JSON only, no markdown: {"win_con":"...","theme":"...","power_level":null}`;
+    const data = await safeFetchJson('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 250,
+        system: 'Extract structured data only. Return valid JSON, no markdown, no commentary.',
+        messages: [{ role: 'user', content: extractPrompt }] }),
+    });
+    const raw = data.content?.[0]?.text || '{}';
+    const parsed = safeParseAIJson(raw);
+    let changed = false;
+    if (parsed.win_con && parsed.win_con.trim()) { state.wincon = parsed.win_con.trim(); changed = true; }
+    if (parsed.theme && parsed.theme.trim()) { state.theme = parsed.theme.trim(); changed = true; }
+    const pl = Number(parsed.power_level);
+    if (pl >= 1 && pl <= 5) { state.powerLevel = pl; changed = true; }
+    if (changed) {
+      await TM.saveDeck({ id: deckId, win_con: state.wincon, theme: state.theme, power_level: state.powerLevel });
+      state.deck.win_con = state.wincon;
+      state.deck.theme = state.theme;
+      state.deck.power_level = state.powerLevel;
+      renderBannerSub();
+      const ctxEl = document.getElementById('chatContext');
+      if (ctxEl) ctxEl.innerHTML = `<strong>Commander:</strong> ${state.cards[0]}<br><strong>Cards:</strong> ${state.cards.length}<br><strong>Win-con:</strong> ${state.wincon || 'Not set'}<br><strong>Theme:</strong> ${state.theme || 'Not set'}`;
+    }
+  } catch (e) {
+    console.warn('Intake extraction failed — win condition/theme can still be set manually in deck settings', e);
+  }
+  state.intakeAnswered = true;
+}
+
 async function sendChat() {
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
@@ -1667,6 +1746,11 @@ async function sendChat() {
   input.value = '';
   input.style.height = 'auto';
   addChatMsg('user', text);
+  // The intake prompt + Urza's opening reply make up the first 2 history entries —
+  // this is the user's first real answer, which is when we quietly capture their
+  // win condition/theme/power level into the deck's actual data instead of leaving
+  // it stuck on generic fallback text for every recommendation prompt going forward.
+  const isFirstAnswer = !state.intakeAnswered && state.chatHistory.length === 2;
   const typingId = addChatTyping();
   document.querySelector('.chat-input-row .btn').disabled = true;
   try {
@@ -1685,6 +1769,7 @@ async function sendChat() {
     addChatMsg('assistant', reply);
     state.chatHistory.push({ role: 'assistant', content: reply });
     persistChatHistory();
+    if (isFirstAnswer) extractIntakeAnswers(text);
   } catch (e) {
     removeChatTyping(typingId);
     addChatMsg('assistant', `Error: ${e.message}`);
