@@ -171,6 +171,8 @@
       <select id="sortBy" onchange="renderCardsTab()" style="font-size:12px;">
         <option value="name">Sort: name</option>
         <option value="cmc">Sort: CMC</option>
+        <option value="price-desc">Sort: price high to low</option>
+        <option value="price-asc">Sort: price low to high</option>
       </select>
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
@@ -941,8 +943,14 @@ function updateSpoilerPreview(name) {
 }
 
 function groupCards(cards, groupBy, sortBy) {
+  function priceOf(name) {
+    const d = cardLookup(name);
+    return parseFloat(d?.prices?.usd || d?.prices?.usd_foil || 0) || 0;
+  }
   const sorted = [...cards].sort((a, b) => {
     if (sortBy === 'cmc') return (state.cardData[a.toLowerCase()]?.cmc || 0) - (state.cardData[b.toLowerCase()]?.cmc || 0);
+    if (sortBy === 'price-desc') return priceOf(b) - priceOf(a);
+    if (sortBy === 'price-asc') return priceOf(a) - priceOf(b);
     return a.localeCompare(b);
   });
   const groups = {};
