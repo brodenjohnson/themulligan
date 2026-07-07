@@ -297,8 +297,10 @@ async function fetchExactPrintings(hints) {
 // deck get moved back to Bulk. This is what makes the collection's "In decks" / "Decks
 // tracked" stats actually reflect reality, and what puts a coloured deck tag on each card.
 // Mutates and returns the same collectionRaw array (array of {name, quantity, set, listedIn}).
+// Basic lands ARE tracked here — full-art/foil basics are genuinely collectible, so they
+// get pulled from Bulk into a deck the same as any other card. (The Collection browse page
+// has its own separate "show basic lands" toggle for display purposes only.)
 function reconcileDeckCollection(oldCardNames, newCardNames, deckName, collectionRaw) {
-  const basics = ['swamp', 'island', 'mountain', 'forest', 'plains'];
   const normalize = n => (n || '').split(' // ')[0].toLowerCase().trim();
   const oldFreq = new Map();
   oldCardNames.forEach(n => { const k = normalize(n); oldFreq.set(k, (oldFreq.get(k) || 0) + 1); });
@@ -309,7 +311,6 @@ function reconcileDeckCollection(oldCardNames, newCardNames, deckName, collectio
   let pulledFromBulk = 0, returnedToBulk = 0;
 
   allKeys.forEach(key => {
-    if (basics.includes(key)) return; // basics aren't worth tracking per-copy
     const oldCount = oldFreq.get(key) || 0;
     const newCount = newFreq.get(key) || 0;
     if (newCount > oldCount) {
