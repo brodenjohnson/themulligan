@@ -414,6 +414,65 @@ function filterByColorIdentity(names, commanderColors, colorData) {
   });
 }
 
+const PRICE_CACHE_KEY = 'mulligan_card_prices_v1';
+
+function getPriceCache() {
+  try {
+    const raw = localStorage.getItem(PRICE_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function setPriceCache(cache) {
+  try {
+    localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    console.warn('Price cache write failed — collection may be very large, cache skipped', e);
+  }
+}
+
+// Prices come from Scryfall's prices.usd field, which Scryfall sources from TCGplayer's
+// market price (updated daily). Same persistent-cache pattern as colour identity — only
+// fetches names not already cached, so repeat visits are instant.
+async function getCardPrices(names, onProgress) {
+  const cache = getPriceCache();
+  const unique = [...new Set(names.map(n => n.split(' // ')[0].trim().toLowerCase()).filter(Boolean))];
+  const missing = unique.filter(n => !(n in cache));
+  if (missing.length > 0) {
+    const total = missing.length;
+    let done = 0;
+    for (let i = 0; i < missing.length; i += 75) {
+      const batch = missing.slice(i, i + 75);
+      try {
+        const res = await fetch('https://api.scryfall.com/cards/collection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifiers: batch.map(name => ({ name })) }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          (data.data || []).forEach(card => {
+            const key = card.name.split(' // ')[0].toLowerCase().trim();
+            const price = parseFloat(card.prices?.usd || card.prices?.usd_foil || 0) || null;
+            cache[key] = price;
+          });
+          (data.not_found || []).forEach(nf => {
+            const key = (nf.name || '').toLowerCase();
+            if (key) cache[key] = null;
+          });
+        }
+      } catch (e) { console.warn('Price lookup batch failed', e); }
+      done += batch.length;
+      if (onProgress) onProgress(Math.min(done, total), total);
+      if (i + 75 < missing.length) await new Promise(r => setTimeout(r, 100));
+    }
+    setPriceCache(cache);
+  }
+  const result = {};
+  unique.forEach(n => { result[n] = cache[n] ?? null; });
+  return result;
+}
+
 function parseDeckList(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   const cards = [];
@@ -644,7 +703,7 @@ window.TM = {
   isLand, isTappedLand,
   validateDeckList, validateCollection,
   parseCSVLine, collectionToLookup,
-  getColorIdentities, filterByColorIdentity,
+  getColorIdentities, filterByColorIdentity, getCardPrices,
   extractPrintingHints, fetchExactPrintings,
   reconcileDeckCollection,
 };
