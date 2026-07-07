@@ -119,6 +119,72 @@
   .add-card-suggestion { padding: 8px 12px; font-size: 13px; cursor: pointer; border-bottom: 0.5px solid var(--bg); }
   .add-card-suggestion:last-child { border-bottom: none; }
   .add-card-suggestion:hover { background: rgba(0,212,204,0.06); color: var(--teal); }
+  /* ===== BUILD MODE ===== */
+  .btn-build-mode { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(90deg, var(--teal), #00b8b0); color: #06201d; border: none; padding: 8px 14px; border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; transition: transform 0.15s; box-shadow: 0 3px 10px rgba(0,212,204,0.3); }
+  .btn-build-mode:hover { transform: translateY(-1px); }
+
+  #buildModeScreen { display: none; position: fixed; inset: 0; z-index: 400; background: radial-gradient(ellipse at top, #1f1f26 0%, #0d0d10 65%); color: #fff; }
+  #buildModeScreen.open { display: flex; }
+  #buildModeScreen::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; }
+
+  .bm-hud { width: 250px; flex-shrink: 0; background: rgba(255,255,255,0.03); border-right: 1px solid rgba(255,255,255,0.08); padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; z-index: 5; overflow-y: auto; }
+  .bm-exit { display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.4); font-size: 11px; cursor: pointer; }
+  .bm-exit:hover { color: rgba(255,255,255,0.7); }
+  .bm-deck-name { font-size: 14px; font-weight: 700; margin-bottom: 1px; }
+  .bm-deck-sub { font-size: 10px; color: rgba(255,255,255,0.4); }
+  .bm-progress-track { height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .bm-progress-fill { height: 100%; background: linear-gradient(90deg, var(--teal), var(--orange)); }
+  .bm-progress-label { display: flex; justify-content: space-between; font-size: 10px; color: rgba(255,255,255,0.5); margin-bottom: 4px; }
+  .bm-synergy { padding: 12px; background: linear-gradient(135deg, rgba(0,212,204,0.12), rgba(0,212,204,0.02)); border: 1px solid rgba(0,212,204,0.25); border-radius: 10px; }
+  .bm-synergy-label { font-size: 10px; color: rgba(255,255,255,0.6); margin-bottom: 7px; display: flex; align-items: center; gap: 5px; }
+  .bm-synergy-track { height: 7px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; margin-bottom: 5px; }
+  .bm-synergy-fill { height: 100%; background: linear-gradient(90deg, var(--teal), #6ef0ea); box-shadow: 0 0 10px rgba(0,212,204,0.5); }
+  .bm-synergy-score { font-size: 17px; font-weight: 800; color: var(--teal); }
+  .bm-stat-group { display: flex; flex-direction: column; gap: 7px; }
+  .bm-stat { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: rgba(255,255,255,0.04); border-radius: 7px; font-size: 11px; }
+  .bm-stat-label { color: rgba(255,255,255,0.55); }
+  .bm-stat-value { font-weight: 700; }
+  .bm-stat-value.warn { color: var(--orange); }
+  .bm-stat-value.ok { color: var(--teal); }
+  .bm-stat-value.danger { color: var(--pink); }
+  .bm-accordion { border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; overflow: hidden; }
+  .bm-accordion-header { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; cursor: pointer; background: rgba(255,255,255,0.03); font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.75); }
+  .bm-accordion-header:hover { background: rgba(255,255,255,0.06); }
+  .bm-accordion-chevron { transition: transform 0.2s; font-size: 12px; color: rgba(255,255,255,0.4); display: inline-block; }
+  .bm-accordion.open .bm-accordion-chevron { transform: rotate(180deg); }
+  .bm-accordion-body { display: none; padding: 8px 10px 10px; }
+  .bm-accordion.open .bm-accordion-body { display: block; }
+  .bm-type-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; color: rgba(255,255,255,0.6); }
+  .bm-type-row span:last-child { color: #fff; font-weight: 600; }
+  .bm-combo-line { font-size: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); line-height: 1.5; color: rgba(255,255,255,0.7); }
+  .bm-combo-line:last-child { border-bottom: none; }
+  .bm-combo-status-complete { color: var(--teal); font-weight: 700; }
+  .bm-combo-status-close { color: var(--orange); font-weight: 700; }
+  .bm-combo-missing { color: var(--pink); font-weight: 700; }
+  .bm-price { display: flex; justify-content: space-between; align-items: center; padding: 9px 10px; background: rgba(255,255,255,0.04); border-radius: 7px; }
+  .bm-price-value { font-size: 14px; font-weight: 700; }
+  .bm-price-sub { font-size: 9px; color: rgba(255,255,255,0.4); }
+  .bm-lock-in { margin-top: auto; background: linear-gradient(90deg, var(--teal), #00b8b0); color: #061716; font-weight: 700; padding: 11px; border-radius: 8px; text-align: center; font-size: 12px; cursor: pointer; opacity: 0.45; }
+
+  .bm-main { flex: 1; padding: 24px 28px; overflow-y: auto; position: relative; z-index: 2; }
+  .bm-main-header { margin-bottom: 18px; }
+  .bm-commander-name { font-size: 18px; font-weight: 800; }
+  .bm-commander-sub { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+  .bm-pile-row { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 14px; }
+  .bm-pile { flex-shrink: 0; width: 140px; }
+  .bm-pile-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 0 2px; }
+  .bm-pile-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: rgba(255,255,255,0.5); }
+  .bm-pile-count { font-size: 10px; color: rgba(255,255,255,0.35); }
+  .bm-pile-stack { position: relative; height: 175px; }
+  .bm-pile.glowing .bm-pile-stack { animation: bm-glow-pulse 1.8s ease-in-out infinite; }
+  @keyframes bm-glow-pulse { 0%,100% { filter: drop-shadow(0 0 4px rgba(255,59,107,0.3)); } 50% { filter: drop-shadow(0 0 18px rgba(255,59,107,0.7)); } }
+  .bm-pile-card-mini { position: absolute; width: 120px; height: 168px; border-radius: 7px; background: #1a1a22; border: 1px solid rgba(255,255,255,0.1); overflow: hidden; }
+  .bm-pile-card-mini img { width: 100%; height: 100%; object-fit: cover; }
+  .bm-pile.glowing .bm-pile-card-mini { border-color: rgba(255,59,107,0.5); }
+  .bm-pile-badge { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); background: var(--pink); color: #fff; font-size: 9px; font-weight: 700; padding: 3px 9px; border-radius: 10px; white-space: nowrap; }
+  .bm-pile.healthy .bm-pile-badge { background: var(--teal); color: #061716; }
+  .bm-footnote { text-align: center; margin-top: 18px; font-size: 11px; color: rgba(255,255,255,0.35); }
+  .bm-footnote strong { color: var(--pink); }
 </style>
 </head>
 <body>
@@ -145,6 +211,7 @@
   <div style="display:flex;gap:8px;flex-shrink:0;align-items:center;">
     <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);" onclick="shareDeck()">Share</button>
     <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);" onclick="openDeckSettings()" title="Edit deck"><i class="ti ti-settings" aria-hidden="true"></i></button>
+    <button class="btn-build-mode" onclick="enterBuildMode()"><i class="ti ti-cards" aria-hidden="true"></i> Enter Build Mode</button>
     <button class="btn btn-teal btn-sm" onclick="switchTab('chat')">Ask Urza</button>
   </div>
 </div>
@@ -388,6 +455,11 @@
   </div>
 </div>
 
+<div id="buildModeScreen">
+  <div class="bm-hud" id="bmHud"></div>
+  <div class="bm-main" id="bmMain"></div>
+</div>
+
 <div class="urza-fab">
   <button class="urza-pill" onclick="switchTab('chat')">
     <div class="urza-dot"></div> Ask Urza
@@ -553,6 +625,180 @@ function switchTab(tab) {
   const idx = tabMap.indexOf(tab);
   if (tabBtns[idx]) tabBtns[idx].classList.add('active');
   document.getElementById(`pane-${tab}`).classList.add('active');
+}
+
+// ===== BUILD MODE =====
+let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set() };
+
+function bmClassifyCard(name) {
+  const d = cardLookup(name);
+  const text = (d?.oracle_text || name).toLowerCase();
+  if (name === state.cards[0]) return null; // commander doesn't go in a pile
+  if (TM.isLand(name, state.cardData)) return 'lands';
+  const rampWords = ['sol ring','arcane signet','chromatic lantern','mind stone','talisman','signet','cultivate','kodama','rampant','farseek','commander\'s sphere','add {c}','add one mana','search your library for a land'];
+  if (rampWords.some(k => text.includes(k))) return 'ramp';
+  const drawWords = ['draw a card','draw two cards','draw three cards','loot','wheel','windfall','ponder','preordain','brainstorm'];
+  if (drawWords.some(k => text.includes(k))) return 'draw';
+  const removalWords = ['destroy target','exile target','counter target','damage to any target','damage to target','-x/-x','return target'];
+  if (removalWords.some(k => text.includes(k))) return 'removal';
+  // Win conditions: anything that's part of a complete combo we already detected
+  const inCombo = (state.combosSummary?.complete || []).some(c => c.toLowerCase().includes(name.toLowerCase()));
+  if (inCombo) return 'wincons';
+  return 'synergy';
+}
+
+function bmBuildPiles() {
+  const piles = {
+    ramp: { label: 'Ramp', cards: [], target: 10 },
+    draw: { label: 'Card draw', cards: [], target: 10 },
+    removal: { label: 'Removal', cards: [], target: 8 },
+    synergy: { label: 'Synergy', cards: [], target: 20 },
+    wincons: { label: 'Win conditions', cards: [], target: 3 },
+    lands: { label: 'Lands', cards: [], target: 37 },
+  };
+  state.cards.forEach(name => {
+    const cat = bmClassifyCard(name);
+    if (cat && piles[cat]) piles[cat].cards.push(name);
+  });
+  return piles;
+}
+
+async function enterBuildMode() {
+  document.getElementById('buildModeScreen').classList.add('open');
+  bmState.piles = bmBuildPiles();
+  renderBmMain();
+  bmState.gameChangers = await TM.getGameChangersList();
+  renderBmHud();
+}
+
+function exitBuildMode() {
+  document.getElementById('buildModeScreen').classList.remove('open');
+}
+
+function bmSynergyScore() {
+  const complete = (state.combosSummary?.complete || []).length;
+  const nonLand = state.cards.filter(c => !TM.isLand(c, state.cardData)).length;
+  const synergySize = bmState.piles?.synergy?.cards.length || 0;
+  const score = Math.min(100, Math.round(complete * 20 + (nonLand > 0 ? (synergySize / nonLand) * 100 * 0.5 : 0)));
+  return score;
+}
+
+function bmGameChangerCount() {
+  return state.cards.filter(c => bmState.gameChangers.has(c.split(' // ')[0].toLowerCase().trim())).length;
+}
+
+function bmGameChangerLimit() {
+  const p = state.powerLevel || 3;
+  if (p <= 2) return 0;
+  if (p === 3) return 3;
+  return Infinity;
+}
+
+function bmCardTypeCounts() {
+  const counts = { Creatures: 0, Instants: 0, Sorceries: 0, Artifacts: 0, Enchantments: 0, Planeswalkers: 0, Lands: 0 };
+  state.cards.forEach(name => {
+    const d = cardLookup(name);
+    const t = d?.type_line || '';
+    if (t.includes('Land')) counts.Lands++;
+    else if (t.includes('Creature')) counts.Creatures++;
+    else if (t.includes('Instant')) counts.Instants++;
+    else if (t.includes('Sorcery')) counts.Sorceries++;
+    else if (t.includes('Planeswalker')) counts.Planeswalkers++;
+    else if (t.includes('Artifact')) counts.Artifacts++;
+    else if (t.includes('Enchantment')) counts.Enchantments++;
+  });
+  return counts;
+}
+
+function bmToggleAccordion(name) {
+  if (name === 'combos') bmState.combosOpen = !bmState.combosOpen;
+  if (name === 'types') bmState.typesOpen = !bmState.typesOpen;
+  renderBmHud();
+}
+
+function renderBmHud() {
+  const synergy = bmSynergyScore();
+  const gcCount = bmGameChangerCount();
+  const gcLimit = bmGameChangerLimit();
+  const gcClass = gcLimit === Infinity ? 'ok' : gcCount > gcLimit ? 'danger' : 'ok';
+  const typeCounts = bmCardTypeCounts();
+  const totalPrice = state.cards.reduce((sum, c) => sum + parseFloat(cardLookup(c)?.prices?.usd || 0), 0);
+  const ownedPrice = state.cards.reduce((sum, c) => sum + (isOwnedCard(c) ? parseFloat(cardLookup(c)?.prices?.usd || 0) : 0), 0);
+  const ramp = bmState.piles.ramp, removal = bmState.piles.removal;
+
+  const combosHtml = (state.combosSummary?.complete?.length || state.combosSummary?.oneAway?.length)
+    ? `${(state.combosSummary.complete || []).slice(0,3).map(c => `<div class="bm-combo-line"><span class="bm-combo-status-complete">Complete</span> — ${c}</div>`).join('')}
+       ${(state.combosSummary.oneAway || []).slice(0,3).map(c => {
+         const parts = c.split('missing: ');
+         const rest = parts[1] || '';
+         const missingName = rest.split(' —')[0];
+         return `<div class="bm-combo-line"><span class="bm-combo-status-close">One away</span> — ${parts[0]}missing: <span class="bm-combo-missing">${missingName}</span></div>`;
+       }).join('')}`
+    : `<div class="bm-combo-line">No combos detected yet.</div>`;
+
+  document.getElementById('bmHud').innerHTML = `
+    <div class="bm-exit" onclick="exitBuildMode()"><i class="ti ti-arrow-left" aria-hidden="true"></i> Exit Build Mode</div>
+    <div>
+      <div class="bm-deck-name">${state.deck?.name || state.cards[0]}</div>
+      <div class="bm-deck-sub">${getCommanderColorIdentity().join('') || 'C'} · Bracket ${state.powerLevel || 3}</div>
+      <div class="bm-progress-label" style="margin-top:8px;"><span>Deck progress</span><span>${state.cards.length} / 100</span></div>
+      <div class="bm-progress-track"><div class="bm-progress-fill" style="width:${Math.min(100,state.cards.length)}%;"></div></div>
+    </div>
+    <div class="bm-synergy">
+      <div class="bm-synergy-label"><i class="ti ti-sparkles" aria-hidden="true"></i> Synergy meter</div>
+      <div class="bm-synergy-track"><div class="bm-synergy-fill" style="width:${synergy}%;"></div></div>
+      <div class="bm-synergy-score">${synergy}<span style="font-size:10px;color:rgba(255,255,255,0.4);"> / 100</span></div>
+    </div>
+    <div class="bm-stat-group">
+      <div class="bm-stat"><span class="bm-stat-label">Game Changers used</span><span class="bm-stat-value ${gcClass}">${gcCount} / ${gcLimit === Infinity ? '∞' : gcLimit}</span></div>
+      <div class="bm-stat"><span class="bm-stat-label">Ramp</span><span class="bm-stat-value ${ramp.cards.length < ramp.target ? 'danger' : 'ok'}">${ramp.cards.length} / ${ramp.target}</span></div>
+      <div class="bm-stat"><span class="bm-stat-label">Removal</span><span class="bm-stat-value ${removal.cards.length < removal.target ? 'warn' : 'ok'}">${removal.cards.length} / ${removal.target}</span></div>
+    </div>
+    <div class="bm-accordion ${bmState.combosOpen ? 'open' : ''}">
+      <div class="bm-accordion-header" onclick="bmToggleAccordion('combos')"><span><i class="ti ti-affiliate" aria-hidden="true"></i> Combos</span><span class="bm-accordion-chevron">⌄</span></div>
+      <div class="bm-accordion-body">${combosHtml}</div>
+    </div>
+    <div class="bm-accordion ${bmState.typesOpen ? 'open' : ''}">
+      <div class="bm-accordion-header" onclick="bmToggleAccordion('types')"><span><i class="ti ti-cards" aria-hidden="true"></i> Card types</span><span class="bm-accordion-chevron">⌄</span></div>
+      <div class="bm-accordion-body">${Object.entries(typeCounts).map(([k,v]) => `<div class="bm-type-row"><span>${k}</span><span>${v}</span></div>`).join('')}</div>
+    </div>
+    <div class="bm-price">
+      <div><div class="bm-price-value">$${totalPrice.toFixed(0)}</div><div class="bm-price-sub">$${ownedPrice.toFixed(0)} already owned</div></div>
+      <i class="ti ti-currency-dollar" style="color:rgba(255,255,255,0.3);font-size:18px;" aria-hidden="true"></i>
+    </div>
+    <div class="bm-lock-in">Lock in deck (coming soon)</div>
+  `;
+}
+
+function renderBmMain() {
+  const piles = bmState.piles;
+  const orderedKeys = ['ramp','draw','removal','synergy','wincons','lands'];
+  const pileHtml = orderedKeys.map(key => {
+    const pile = piles[key];
+    const healthy = pile.cards.length >= pile.target;
+    const glow = !healthy && key !== 'lands';
+    const cardsToShow = pile.cards.slice(0, 3);
+    return `<div class="bm-pile ${glow ? 'glowing' : ''} ${healthy ? 'healthy' : ''}">
+      <div class="bm-pile-label-row"><span class="bm-pile-label">${pile.label}</span><span class="bm-pile-count">${pile.cards.length}</span></div>
+      <div class="bm-pile-stack">
+        ${cardsToShow.map((c,i) => {
+          const d = cardLookup(c);
+          const img = d?.image_uris?.normal || '';
+          return `<div class="bm-pile-card-mini" style="transform:rotate(${(i-1)*3}deg);top:${i*2}px;">${img ? `<img src="${img}" alt="${c}">` : ''}</div>`;
+        }).join('') || '<div class="bm-pile-card-mini"></div>'}
+        <div class="bm-pile-badge">${healthy ? 'healthy' : 'needs ' + (pile.target - pile.cards.length) + ' more'}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('bmMain').innerHTML = `
+    <div class="bm-main-header">
+      <div class="bm-commander-name">✦ ${state.cards[0]}</div>
+      <div class="bm-commander-sub">Your cards laid out by role — piles still needing work are glowing</div>
+    </div>
+    <div class="bm-pile-row">${pileHtml}</div>
+    <div class="bm-footnote">Build order: <strong>ramp → draw → removal → synergy → win-cons → lands</strong>. Pack opening, sideboard, and lock-in are coming in the next update.</div>
+  `;
 }
 
 function switchTabWithFocus(tab, focus) {
