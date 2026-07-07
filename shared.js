@@ -341,6 +341,32 @@ function reconcileDeckCollection(oldCardNames, newCardNames, deckName, collectio
 
 const COLOR_CACHE_KEY = 'mulligan_card_colors_v1';
 
+const GAME_CHANGERS_CACHE_KEY = 'mulligan_game_changers_v1';
+const GAME_CHANGERS_CACHE_HOURS = 24 * 7; // WotC updates this every few months, weekly refresh is plenty
+
+// Uses Scryfall's is:gamechanger search — a live, official, always-current list
+// maintained directly from WotC's own Commander Brackets Game Changers roster.
+// No hardcoded list to go stale.
+async function getGameChangersList() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(GAME_CHANGERS_CACHE_KEY) || 'null');
+    if (cached && (Date.now() - cached.fetchedAt) < GAME_CHANGERS_CACHE_HOURS * 3600 * 1000) {
+      return new Set(cached.names);
+    }
+  } catch {}
+  try {
+    const res = await fetch('https://api.scryfall.com/cards/search?q=is%3Agamechanger');
+    if (!res.ok) return new Set();
+    const data = await res.json();
+    const names = (data.data || []).map(c => c.name.toLowerCase());
+    localStorage.setItem(GAME_CHANGERS_CACHE_KEY, JSON.stringify({ names, fetchedAt: Date.now() }));
+    return new Set(names);
+  } catch (e) {
+    console.warn('Could not fetch Game Changers list', e);
+    return new Set();
+  }
+}
+
 function getColorCache() {
   try {
     const raw = localStorage.getItem(COLOR_CACHE_KEY);
@@ -706,5 +732,5 @@ window.TM = {
   parseCSVLine, collectionToLookup,
   getColorIdentities, filterByColorIdentity, getCardPrices,
   extractPrintingHints, fetchExactPrintings,
-  reconcileDeckCollection,
+  reconcileDeckCollection, getGameChangersList,
 };
