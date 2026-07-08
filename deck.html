@@ -203,8 +203,7 @@
   .bm-pack-card-img.decided img { opacity: 0.3; }
   .bm-pack-decided-tag { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; background: rgba(0,0,0,0.55); z-index: 2; text-align: center; padding: 6px; }
   .bm-undo-btn { position: absolute; bottom: 5px; right: 5px; background: rgba(255,255,255,0.2); color: #fff; font-size: 8px; padding: 3px 6px; border-radius: 5px; cursor: pointer; z-index: 3; }
-  .bm-pack-owned { position: absolute; top: 5px; left: 5px; width: 15px; height: 15px; border-radius: 50%; background: var(--teal); display: flex; align-items: center; justify-content: center; font-size: 8px; color: #061716; font-weight: 900; }
-  .bm-pack-score { position: absolute; top: 5px; right: 5px; background: rgba(0,212,204,0.9); color: #061716; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 8px; }
+  .bm-pack-score { position: absolute; top: 6px; left: 6px; background: rgba(0,212,204,0.92); color: #061716; font-size: 10px; font-weight: 800; padding: 3px 7px; border-radius: 8px; }
   .bm-pack-actions { display: flex; gap: 4px; }
   .bm-pack-action { flex: 1; padding: 6px 0; border-radius: 6px; font-size: 9px; font-weight: 700; text-align: center; cursor: pointer; border: none; }
   .bm-pack-action.selected { outline: 2px solid #fff; }
@@ -257,10 +256,10 @@
 
   /* ===== FANNED PACK HAND VIEW ===== */
   .bm-hand-row { display: flex; justify-content: center; padding: 30px 0 50px; min-height: 260px; }
-  .bm-hand-card { width: 170px; flex-shrink: 0; margin-left: -65px; transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), margin 0.25s, z-index 0s; transform-origin: bottom center; cursor: pointer; position: relative; }
+  .bm-hand-card { width: 244px; flex-shrink: 0; margin-left: -95px; transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), margin 0.25s, z-index 0s; transform-origin: bottom center; cursor: pointer; position: relative; }
   .bm-hand-card:first-child { margin-left: 0; }
-  .bm-hand-card:hover { transform: translateY(-36px) rotate(0deg) scale(1.12); z-index: 50; }
-  .bm-hand-card-img { aspect-ratio: 5/7; border-radius: 10px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 8px 20px rgba(0,0,0,0.4); position: relative; cursor: pointer; }
+  .bm-hand-card:hover { transform: translateY(-50px) rotate(0deg) scale(1.22); z-index: 50; }
+  .bm-hand-card-img { width: 244px; height: 340px; border-radius: 10px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 8px 20px rgba(0,0,0,0.4); position: relative; cursor: pointer; }
   .bm-hand-card-img img { width: 100%; height: 100%; object-fit: cover; }
   .bm-hand-card-price { position: absolute; bottom: 4px; left: 4px; background: rgba(0,0,0,0.6); color: var(--orange); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 6px; }
   .bm-hand-card-actions { display: flex; gap: 3px; margin-top: 6px; opacity: 0; transition: opacity 0.15s; }
@@ -1192,6 +1191,22 @@ async function bmGeneratePack(pileKey) {
   }
   const ownedFiltered = bmState.ownedFilteredCache.filter(n => !deckCardsLower.has(n.split(' // ')[0].toLowerCase().trim()));
 
+  // Real community data (same source already used on the regular Recommendations tab) —
+  // cached once per session since it's keyed off the commander, not the current pile.
+  if (bmState.recommanderCache === undefined) {
+    bmState.recommanderCache = [];
+    try {
+      const recRes = await fetch('/api/recommander', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ card_format: 'name', commander: bmState.draftCards[0].split(' // ')[0], partner: null, deck: bmState.draftCards.slice(1) }),
+      });
+      if (recRes.ok) { const d = await recRes.json(); bmState.recommanderCache = (d.data?.recommendations || []).slice(0, 30); }
+    } catch (e) { console.warn('Recommander unavailable for this pack, using AI judgement only', e); }
+  }
+  const communityLine = bmState.recommanderCache.length > 0
+    ? `\nReal community data — cards frequently played with this commander (from aggregated real decklists, not a guess): ${bmState.recommanderCache.map(r => r.name).join(', ')}`
+    : '\nNo community data available for this commander — rely on your own MTG knowledge.';
+
   const budget = state.deck?.budget;
   const spentSoFar = bmState.draftCards.reduce((sum, c) => sum + parseFloat(cardLookup(c)?.prices?.usd || 0), 0);
   const remaining = budget ? Math.max(0, budget - spentSoFar) : null;
@@ -1209,11 +1224,14 @@ Colour identity: ${guildName}
 Current decklist (${bmState.draftCards.length} cards — never suggest any of these): ${bmState.draftCards.join(', ')}
 Deck's overall plan: ${state.deck?.theme || 'Not specified — infer from the commander and decklist'}
 Owned cards not in this deck (colour-filtered): ${ownedFiltered.slice(0, 300).join(', ') || 'none tracked'}
+${communityLine}
 ${budgetLine}
 ${prefLine}
 
 This deck's "${pile.label}" pile currently has ${pile.cards.length} cards and needs roughly ${Math.max(0, pile.target - pile.cards.length)} more to be healthy.
 Suggest exactly 10 real, verified Magic: The Gathering cards that fill the "${pile.label}" role specifically for this deck, in ${guildName} colours only.
+Give real weight to the community data above where it's relevant to this pile's role — a card lots of real decks with this commander actually run is a stronger signal than pure theory.
+For the "score" field: 90+ means it appears in the real community data above AND fits this pile; 70-89 means strong theoretical fit but not confirmed by community data; below 70 means a speculative or synergy-dependent pick. Be honest and varied — not everything is a 90.
 CRITICAL: Only real printed cards. Never suggest anything already in the current decklist.
 Return JSON only, no markdown. Keep each reason to 8 words or fewer:
 {"cards":[{"name":"Card","reason":"short reason","score":85}]}`;
@@ -1254,9 +1272,8 @@ function renderBmPack() {
     return `<div class="bm-hand-card" draggable="true" ondragstart="bmDragStart(event, ${i})">
       <div class="bm-hand-card-img" onclick="openCardModal('${c.name.replace(/'/g,"\\'")}')">
         ${img ? `<img src="${img}" alt="${c.name}">` : c.name}
-        ${c.owned ? `<div class="bm-pack-owned">✓</div>` : ''}
         <div class="bm-pack-score">${c.score || '?'}</div>
-        ${!c.owned && price > 0 ? `<div class="bm-hand-card-price">$${price.toFixed(2)}</div>` : ''}
+        ${c.owned ? `<div class="bm-hand-card-price" style="color:var(--teal);">✓ Owned</div>` : (price > 0 ? `<div class="bm-hand-card-price">$${price.toFixed(2)}</div>` : '')}
       </div>
       <div class="bm-hand-card-actions">
         <button class="bm-pack-action keep" onclick="event.stopPropagation();bmDecide(${i}, 'keep')">Keep</button>
