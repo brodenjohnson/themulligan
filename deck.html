@@ -235,6 +235,7 @@
   .bm-browse-name { font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bm-browse-meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 3px; }
   .bm-browse-match { color: var(--teal); font-weight: 600; }
+  .bm-browse-ai { color: var(--orange); font-weight: 600; }
   .bm-browse-owned { color: var(--teal); }
   .bm-browse-price { color: var(--orange); }
   .bm-browse-actions { display: flex; gap: 6px; }
@@ -1352,6 +1353,64 @@ async function bmGetFullRecommanderList() {
   return bmState.recommanderFullCache;
 }
 
+async function bmBrowseAllViaAI(pileKey) {
+  const pile = bmState.piles[pileKey];
+  const commander = bmState.draftCards[0].split(' // ')[0].trim();
+  const commanderD = cardLookup(bmState.draftCards[0]);
+  const commanderOracleText = commanderD?.oracle_text || (commanderD ? '' : 'Not available.');
+  const commanderColors = getCommanderColorIdentity();
+  const guildName = TM.getGuildName(commanderColors) || commanderColors.join('') || 'Colourless';
+  const deckCardsLower = new Set(bmState.draftCards.map(c => c.split(' // ')[0].toLowerCase().trim()));
+
+  const pileInstructionLine = pileKey === 'flex'
+    ? `Suggest genuinely powerful, generically excellent ${guildName} cards — the "goodstuff" that's worth a slot even without fitting a specific plan.`
+    : `Suggest real cards that fill the "${pile.label}" role for this specific deck, in ${guildName} colours only.`;
+
+  const prompt = `Commander: "${commander}"
+Actual rules text: ${commanderOracleText}
+Colour identity: ${guildName}
+Current decklist (${bmState.draftCards.length} cards — never suggest any of these): ${bmState.draftCards.join(', ')}
+Deck's overall plan: ${state.deck?.theme || 'Not specified — infer from the commander\'s actual abilities above'}
+
+This commander is too new for community deck-building databases to have data on yet, so there's no popularity data available — reason directly from the commander's real rules text above and general deck-building knowledge instead.
+${pileInstructionLine}
+Suggest as many genuinely good, real, distinct cards as you can, up to 40. Quality over padding — if you can only think of 15 genuinely good fits, give 15, don't pad with weak filler.
+CRITICAL: Only real printed Magic cards you are confident exist. Never invent a card. Never suggest anything already in the current decklist.
+Return JSON only, no markdown. Keep each reason to 8 words or fewer:
+{"cards":[{"name":"Card","reason":"short reason","score":85}]}`;
+
+  const data = await safeFetchJson('/api/chat', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 3000,
+      system: 'You are an MTG deck-building expert. You reason strictly from the actual card text given to you, never from a card\'s name or flavour. You never invent card names — only suggest real, verifiable Magic cards. Return only valid JSON, no markdown.',
+      messages: [{ role: 'user', content: prompt }] }),
+  });
+  const raw = data.content?.[0]?.text || '{}';
+  const parsed = safeParseAIJson(raw);
+  const candidates = (parsed.cards || []).filter(c => !deckCardsLower.has(c.name.split(' // ')[0].toLowerCase().trim()));
+
+  const names = candidates.map(c => c.name);
+  const verifiedData = names.length > 0 ? await TM.fetchScryfallBulk(names) : {};
+  Object.assign(state.cardData, verifiedData);
+  const verified = candidates.filter(c => verifiedData[c.name.toLowerCase()] || verifiedData[c.name.split(' // ')[0].toLowerCase().trim()]);
+
+  const ownedFiltered = bmState.ownedFilteredCache || [];
+  const ownedLower = new Set(ownedFiltered.map(n => n.toLowerCase()));
+  bmState.browseResults = verified.map(c => {
+    const d = cardLookup(c.name);
+    return {
+      name: d.name,
+      score: (c.score || 0) / 100, // normalize to the same 0-1 scale as Recommander's real score
+      aiOnly: true, // flags this as AI-reasoned rather than real community data, shown honestly in the UI
+      cmc: d.cmc || 0,
+      price: parseFloat(d.prices?.usd || 0),
+      owned: state.collection.has(c.name.toLowerCase()) || ownedLower.has(c.name.toLowerCase()),
+    };
+  });
+  bmSortBrowseResults();
+  renderBmBrowse();
+}
+
 async function bmBrowseAll(pileKey) {
   bmState.browsingPile = pileKey;
   bmState.viewingPile = null;
@@ -1364,8 +1423,10 @@ async function bmBrowseAll(pileKey) {
     const candidates = recs.filter(r => !deckCardsLower.has(r.name.split(' // ')[0].toLowerCase().trim()));
 
     if (candidates.length === 0) {
-      bmState.browseResults = [];
-      renderBmBrowse();
+      // Recommander doesn't recognize this commander — likely too new for its database.
+      // Fall back to the same real-oracle-text AI reasoning that powers packs, just
+      // scaled up to a much larger, still fully Scryfall-verified batch.
+      await bmBrowseAllViaAI(pileKey);
       return;
     }
 
@@ -1464,6 +1525,7 @@ function renderBmBrowse() {
   const displayList = bmState.browseOwnedOnly ? withIndex.filter(c => c.owned) : withIndex;
   const ownedCount = withIndex.filter(c => c.owned).length;
 
+  const isAiMode = bmState.browseResults.some(c => c.aiOnly);
   const rowsHtml = displayList.map(c => {
     const i = c.origIndex;
     const d = cardLookup(c.name);
@@ -1476,7 +1538,7 @@ function renderBmBrowse() {
       <div class="bm-browse-info">
         <div class="bm-browse-name">${c.name}</div>
         <div class="bm-browse-meta">
-          ${c.score ? `<span class="bm-browse-match">${matchPct}% match</span>` : ''}
+          ${c.aiOnly ? `<span class="bm-browse-ai">AI suggested</span>` : (c.score ? `<span class="bm-browse-match">${matchPct}% match</span>` : '')}
           ${c.owned ? `<span class="bm-browse-owned">✓ Owned</span>` : (c.price > 0 ? `<span class="bm-browse-price">$${c.price.toFixed(2)}</span>` : '')}
           <span class="bm-browse-cmc">CMC ${c.cmc}</span>
         </div>
@@ -1493,7 +1555,7 @@ function renderBmBrowse() {
       <button class="bm-back-btn" onclick="bmState.browsingPile=null;renderBmSideboardRail();renderBmMain();"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
       <div style="flex:1;">
         <div class="bm-commander-name">Browse all — <span style="color:var(--pink);">${pile.label}</span></div>
-        <div class="bm-commander-sub">${displayList.length} real candidates from community data — drag to Keep or the Sideboard, or use the buttons</div>
+        <div class="bm-commander-sub">${displayList.length} ${isAiMode ? 'AI-reasoned candidates (this commander is too new for community data — Claude reasoned from its real card text instead)' : 'real candidates from community data'} — drag to Keep or the Sideboard, or use the buttons</div>
       </div>
       <label class="bm-owned-toggle">
         <input type="checkbox" ${bmState.browseOwnedOnly ? 'checked' : ''} onchange="bmToggleBrowseOwnedOnly(this.checked)">
@@ -1503,7 +1565,7 @@ function renderBmBrowse() {
         ${Object.entries(sortLabels).map(([v, l]) => `<option value="${v}" ${bmState.browseSort === v ? 'selected' : ''}>Sort: ${l}</option>`).join('')}
       </select>
     </div>
-    <div class="bm-browse-list">${rowsHtml || `<div class="bm-pile-empty-note">No community data found for this role. This usually means the commander is too new for Recommander's database to have caught up yet — try "Open a pack" instead, which reasons directly from the commander's card text rather than relying on community data.</div>`}</div>`;
+    <div class="bm-browse-list">${rowsHtml || `<div class="bm-pile-empty-note">Couldn't find any real candidates for this role, even reasoning directly from the commander's card text. Try "Open a pack" or a different role.</div>`}</div>`;
   renderBmSideboardRail();
 }
 
