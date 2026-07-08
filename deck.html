@@ -171,7 +171,7 @@
   .bm-main-header { margin-bottom: 18px; }
   .bm-commander-name { font-size: 18px; font-weight: 800; }
   .bm-commander-sub { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px; }
-  .bm-commander-portrait { width: 60px; height: 84px; border-radius: 8px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.15); position: relative; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.3); font-size: 20px; }
+  .bm-commander-portrait { width: 76px; height: 106px; border-radius: 8px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.15); position: relative; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.3); font-size: 20px; }
   .bm-commander-portrait img { width: 100%; height: 100%; object-fit: cover; }
   .bm-portrait-edit { position: absolute; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; opacity: 0; transition: opacity 0.15s; }
   .bm-commander-portrait:hover .bm-portrait-edit { opacity: 1; }
@@ -181,14 +181,14 @@
   .art-picker-option img { width: 100%; aspect-ratio: 5/7; object-fit: cover; display: block; }
   .art-picker-option-label { font-size: 10px; color: var(--ink3); text-align: center; padding: 4px 2px; }
   .bm-pile-row { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 14px; }
-  .bm-pile { flex-shrink: 0; width: 140px; }
+  .bm-pile { flex-shrink: 0; width: 165px; }
   .bm-pile-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 0 2px; }
   .bm-pile-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: rgba(255,255,255,0.5); }
   .bm-pile-count { font-size: 10px; color: rgba(255,255,255,0.35); }
-  .bm-pile-stack { position: relative; height: 175px; }
+  .bm-pile-stack { position: relative; height: 210px; }
   .bm-pile.glowing .bm-pile-stack { animation: bm-glow-pulse 1.8s ease-in-out infinite; }
   @keyframes bm-glow-pulse { 0%,100% { filter: drop-shadow(0 0 4px rgba(255,59,107,0.3)); } 50% { filter: drop-shadow(0 0 18px rgba(255,59,107,0.7)); } }
-  .bm-pile-card-mini { position: absolute; width: 120px; height: 168px; border-radius: 7px; background: #1a1a22; border: 1px solid rgba(255,255,255,0.1); overflow: hidden; }
+  .bm-pile-card-mini { position: absolute; width: 145px; height: 203px; border-radius: 7px; background: #1a1a22; border: 1px solid rgba(255,255,255,0.1); overflow: hidden; }
   .bm-pile-card-mini img { width: 100%; height: 100%; object-fit: cover; }
   .bm-pile.glowing .bm-pile-card-mini { border-color: rgba(255,59,107,0.5); }
   .bm-pile-badge { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); background: var(--pink); color: #fff; font-size: 9px; font-weight: 700; padding: 3px 9px; border-radius: 10px; white-space: nowrap; }
@@ -215,7 +215,8 @@
   .bm-flat-btn.reroll { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
   .bm-flat-btn.continue { background: linear-gradient(90deg, var(--teal), #00b8b0); color: #061716; }
   /* ===== SIDEBOARD RIGHT RAIL ===== */
-  .bm-sideboard-rail { width: 210px; flex-shrink: 0; background: rgba(255,255,255,0.03); border-left: 1px solid rgba(245,166,35,0.2); padding: 14px 12px; display: flex; flex-direction: column; gap: 10px; z-index: 5; overflow-y: auto; transition: width 0.2s, padding 0.2s; }
+  .bm-sideboard-rail { width: 245px; flex-shrink: 0; background: rgba(255,255,255,0.03); border-left: 1px solid rgba(245,166,35,0.2); padding: 14px 12px; display: flex; flex-direction: column; gap: 10px; z-index: 5; overflow-y: auto; transition: width 0.2s, padding 0.2s; }
+  .bm-sideboard-rail.drag-over { background: rgba(245,166,35,0.1); border-left-color: var(--orange); }
   .bm-sideboard-rail.collapsed { width: 46px; padding: 14px 8px; overflow: hidden; }
   .bm-sb-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
   .bm-sb-header-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--orange); white-space: nowrap; }
@@ -239,7 +240,7 @@
   .bm-back-btn:hover { background: rgba(255,255,255,0.15); }
 
   /* ===== PILE DETAIL VIEW (contents-first, before opening a pack) ===== */
-  .bm-pile-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .bm-pile-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 12px; margin-bottom: 20px; }
   .bm-pile-detail-card { position: relative; }
   .bm-pile-detail-img { aspect-ratio: 5/7; border-radius: 8px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.12); cursor: pointer; margin-bottom: 6px; }
   .bm-pile-detail-img img { width: 100%; height: 100%; object-fit: cover; }
@@ -253,14 +254,26 @@
 
   /* ===== FANNED PACK HAND VIEW ===== */
   .bm-hand-row { display: flex; justify-content: center; padding: 30px 0 50px; min-height: 260px; }
-  .bm-hand-card { width: 140px; flex-shrink: 0; margin-left: -55px; transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), margin 0.25s, z-index 0s; transform-origin: bottom center; cursor: pointer; position: relative; }
+  .bm-hand-card { width: 170px; flex-shrink: 0; margin-left: -65px; transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), margin 0.25s, z-index 0s; transform-origin: bottom center; cursor: pointer; position: relative; }
   .bm-hand-card:first-child { margin-left: 0; }
   .bm-hand-card:hover { transform: translateY(-36px) rotate(0deg) scale(1.12); z-index: 50; }
-  .bm-hand-card-img { aspect-ratio: 5/7; border-radius: 10px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 8px 20px rgba(0,0,0,0.4); position: relative; }
+  .bm-hand-card-img { aspect-ratio: 5/7; border-radius: 10px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 8px 20px rgba(0,0,0,0.4); position: relative; cursor: pointer; }
   .bm-hand-card-img img { width: 100%; height: 100%; object-fit: cover; }
   .bm-hand-card-price { position: absolute; bottom: 4px; left: 4px; background: rgba(0,0,0,0.6); color: var(--orange); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 6px; }
   .bm-hand-card-actions { display: flex; gap: 3px; margin-top: 6px; opacity: 0; transition: opacity 0.15s; }
   .bm-hand-card:hover .bm-hand-card-actions { opacity: 1; }
+
+  .bm-zones-row { display: flex; gap: 14px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px; }
+  .bm-kept-tray { flex: 1; min-height: 130px; border-radius: 12px; border: 2px dashed rgba(0,212,204,0.25); padding: 12px; transition: all 0.15s; }
+  .bm-kept-tray.drag-over { border-color: var(--teal); background: rgba(0,212,204,0.06); }
+  .bm-zone-label { font-size: 11px; font-weight: 700; color: var(--teal); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .bm-zone-empty { font-size: 11px; color: rgba(255,255,255,0.3); padding: 20px 0; text-align: center; }
+  .bm-kept-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .bm-kept-card { width: 90px; cursor: grab; }
+  .bm-kept-card-img { aspect-ratio: 5/7; border-radius: 7px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(0,212,204,0.3); cursor: pointer; }
+  .bm-kept-card-img img { width: 100%; height: 100%; object-fit: cover; }
+  .bm-discard-zone { width: 130px; flex-shrink: 0; border-radius: 12px; border: 2px dashed rgba(255,59,107,0.25); display: flex; flex-direction: column; align-items: center; justify-content: center; color: rgba(255,59,107,0.6); transition: all 0.15s; }
+  .bm-discard-zone.drag-over { border-color: var(--pink); background: rgba(255,59,107,0.1); color: var(--pink); }
 </style>
 </head>
 <body>
@@ -561,7 +574,7 @@
 <div id="buildModeScreen">
   <div class="bm-hud" id="bmHud"></div>
   <div class="bm-main" id="bmMain"></div>
-  <div class="bm-sideboard-rail" id="bmSideboardRail"></div>
+  <div class="bm-sideboard-rail" id="bmSideboardRail" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="bmDropOnSideboardFromPack(event)"></div>
 </div>
 
 <div class="urza-fab">
@@ -744,7 +757,7 @@ function switchTab(tab) {
 // state.cards directly. Nothing touches your actual saved deck until a real Lock In step
 // exists, so you can freely experiment (swap cards, open packs, reroll) without any risk
 // to the live deck. Exiting Build Mode without locking in simply discards the draft.
-let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null };
+let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null };
 
 function bmClassifyCard(name) {
   const d = cardLookup(name);
@@ -1164,10 +1177,15 @@ async function bmGeneratePack(pileKey) {
   const guildName = TM.getGuildName(commanderColors) || commanderColors.join('') || 'Colourless';
   const deckCardsLower = new Set(bmState.draftCards.map(c => c.split(' // ')[0].toLowerCase().trim()));
 
-  const ownedRaw = [...new Set(state.collectionRaw.map(c => c.name).filter(n => n && !['swamp','island','mountain','forest','plains'].includes(n.toLowerCase())))]
-    .filter(n => !deckCardsLower.has(n.split(' // ')[0].toLowerCase().trim()));
-  const colorData = await TM.getColorIdentities(ownedRaw);
-  const ownedFiltered = TM.filterByColorIdentity(ownedRaw, commanderColors, colorData);
+  // The colour-filtered "owned but not in deck" list is expensive to compute (a full pass
+  // over the collection) but doesn't change during a Build Mode session — compute it once
+  // and reuse it for every pack, instead of redoing this on every single pack open.
+  if (!bmState.ownedFilteredCache) {
+    const ownedRaw = [...new Set(state.collectionRaw.map(c => c.name).filter(n => n && !['swamp','island','mountain','forest','plains'].includes(n.toLowerCase())))];
+    const colorData = await TM.getColorIdentities(ownedRaw);
+    bmState.ownedFilteredCache = TM.filterByColorIdentity(ownedRaw, commanderColors, colorData);
+  }
+  const ownedFiltered = bmState.ownedFilteredCache.filter(n => !deckCardsLower.has(n.split(' // ')[0].toLowerCase().trim()));
 
   const budget = state.deck?.budget;
   const spentSoFar = bmState.draftCards.reduce((sum, c) => sum + parseFloat(cardLookup(c)?.prices?.usd || 0), 0);
@@ -1192,12 +1210,12 @@ ${prefLine}
 This deck's "${pile.label}" pile currently has ${pile.cards.length} cards and needs roughly ${Math.max(0, pile.target - pile.cards.length)} more to be healthy.
 Suggest exactly 10 real, verified Magic: The Gathering cards that fill the "${pile.label}" role specifically for this deck, in ${guildName} colours only.
 CRITICAL: Only real printed cards. Never suggest anything already in the current decklist.
-Return JSON only, no markdown:
-{"cards":[{"name":"Card","reason":"one short sentence","score":85}]}`;
+Return JSON only, no markdown. Keep each reason to 8 words or fewer:
+{"cards":[{"name":"Card","reason":"short reason","score":85}]}`;
 
   const data = await safeFetchJson('/api/chat', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1200,
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 800,
       system: 'You are an MTG deck-building expert. You never invent or hallucinate card names. Return only valid JSON, no markdown.',
       messages: [{ role: 'user', content: prompt }] }),
   });
@@ -1216,41 +1234,68 @@ Return JSON only, no markdown:
 
 function renderBmPack() {
   const pile = bmState.piles[bmState.packCategory];
-  const cardsHtml = bmState.currentPack.map((c, i) => {
-    const decision = bmState.packDecisions[i];
-    const decided = !!decision;
+  const handIndices = [], keptIndices = [];
+  bmState.currentPack.forEach((c, i) => {
+    const d = bmState.packDecisions[i];
+    if (d === 'keep') keptIndices.push(i);
+    else if (!d) handIndices.push(i); // sideboard/discard are committed immediately and leave the pack view entirely
+  });
+
+  function handCardMarkup(i) {
+    const c = bmState.currentPack[i];
     const d = cardLookup(c.name);
     const img = d?.image_uris?.normal || '';
     const price = parseFloat(d?.prices?.usd || 0);
-    const tagText = decision === 'keep' ? 'KEPT' : decision === 'discard' ? 'DISCARDED' : decision === 'sideboard' ? 'SIDEBOARDED' : '';
-    return `<div class="bm-hand-card" style="${decided ? 'opacity:0.35;' : ''}">
+    return `<div class="bm-hand-card" draggable="true" ondragstart="bmDragStart(event, ${i})">
       <div class="bm-hand-card-img" onclick="openCardModal('${c.name.replace(/'/g,"\\'")}')">
         ${img ? `<img src="${img}" alt="${c.name}">` : c.name}
-        ${decided ? `<div class="bm-pack-decided-tag">${tagText}</div>` : ''}
         ${c.owned ? `<div class="bm-pack-owned">✓</div>` : ''}
         <div class="bm-pack-score">${c.score || '?'}</div>
         ${!c.owned && price > 0 ? `<div class="bm-hand-card-price">$${price.toFixed(2)}</div>` : ''}
       </div>
       <div class="bm-hand-card-actions">
-        ${decided
-          ? `<button class="bm-pack-action discard" style="flex:1;" onclick="event.stopPropagation();bmUndoDecision(${i})">Undo</button>`
-          : `<button class="bm-pack-action keep" onclick="event.stopPropagation();bmDecide(${i}, 'keep')">Keep</button>
-             <button class="bm-pack-action side" onclick="event.stopPropagation();bmDecide(${i}, 'sideboard')">Side</button>
-             <button class="bm-pack-action discard" onclick="event.stopPropagation();bmDecide(${i}, 'discard')">✕</button>`}
+        <button class="bm-pack-action keep" onclick="event.stopPropagation();bmDecide(${i}, 'keep')">Keep</button>
+        <button class="bm-pack-action side" onclick="event.stopPropagation();bmDecide(${i}, 'sideboard')">Side</button>
+        <button class="bm-pack-action discard" onclick="event.stopPropagation();bmDecide(${i}, 'discard')">✕</button>
       </div>
     </div>`;
-  }).join('');
+  }
+
+  function keptCardMarkup(i) {
+    const c = bmState.currentPack[i];
+    const d = cardLookup(c.name);
+    const img = d?.image_uris?.normal || '';
+    return `<div class="bm-kept-card" draggable="true" ondragstart="bmDragStart(event, ${i})">
+      <div class="bm-kept-card-img" onclick="openCardModal('${c.name.replace(/'/g,"\\'")}')">
+        ${img ? `<img src="${img}" alt="${c.name}">` : c.name}
+      </div>
+      <button class="bm-pack-action discard" style="width:100%;margin-top:4px;" onclick="bmUndoKeep(${i})">Undo</button>
+    </div>`;
+  }
 
   document.getElementById('bmMain').innerHTML = `
     <div class="bm-back-row">
       <button class="bm-back-btn" onclick="bmState.currentPack=null;renderBmMain();"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
       <div>
         <div class="bm-commander-name">Opening a pack for <span style="color:var(--pink);">${pile.label}</span></div>
-        <div class="bm-commander-sub">Hover a card to lift it — Keep, Sideboard, or Discard</div>
+        <div class="bm-commander-sub">Hover to lift a card, or drag it to Keep, the Sideboard, or the graveyard</div>
       </div>
     </div>
-    <div class="bm-hand-row">${cardsHtml}</div>
-    <div style="display:flex;gap:10px;justify-content:center;margin-top:10px;">
+    <div class="bm-hand-row">${handIndices.map(handCardMarkup).join('') || '<div style="color:rgba(255,255,255,0.3);font-size:12px;padding:40px 0;">All cards decided — hit Continue below.</div>'}</div>
+
+    <div class="bm-zones-row">
+      <div class="bm-kept-tray" id="bmKeptTray" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="bmDropOnKeep(event)">
+        <div class="bm-zone-label"><i class="ti ti-circle-check" aria-hidden="true"></i> Keeping (${keptIndices.length})</div>
+        <div class="bm-kept-row">${keptIndices.map(keptCardMarkup).join('') || '<div class="bm-zone-empty">Drag cards here, or hit Keep</div>'}</div>
+      </div>
+      <div class="bm-discard-zone" id="bmDiscardZone" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="bmDropOnDiscardZone(event)">
+        <i class="ti ti-skull" aria-hidden="true" style="font-size:22px;"></i>
+        <div style="font-size:11px;margin-top:4px;">Graveyard</div>
+        <div style="font-size:9px;color:rgba(255,255,255,0.35);">drag to discard</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;">
       <button class="bm-flat-btn reroll" onclick="bmRerollPack()"><i class="ti ti-refresh" aria-hidden="true"></i> Reroll this pack</button>
       <button class="bm-flat-btn continue" onclick="bmApplyPack()">Continue →</button>
     </div>
@@ -1258,13 +1303,52 @@ function renderBmPack() {
 }
 
 function bmDecide(i, action) {
-  bmState.packDecisions[i] = bmState.packDecisions[i] === action ? undefined : action;
+  if (action === 'sideboard') {
+    const c = bmState.currentPack[i];
+    bmState.packDecisions[i] = 'sideboard';
+    bmState.sideboard.push({ name: c.name, from: bmState.packCategory });
+    renderBmSideboardRail();
+    bmAutoSave();
+  } else if (action === 'discard') {
+    bmState.packDecisions[i] = 'discard';
+  } else if (action === 'keep') {
+    bmState.packDecisions[i] = 'keep';
+  }
   renderBmPack();
 }
 
-function bmUndoDecision(i) {
+function bmUndoKeep(i) {
   delete bmState.packDecisions[i];
   renderBmPack();
+}
+
+function bmDragStart(e, i) {
+  bmState.draggingPackIndex = i;
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function bmDropOnKeep(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (bmState.draggingPackIndex === null || bmState.draggingPackIndex === undefined) return;
+  bmDecide(bmState.draggingPackIndex, 'keep');
+  bmState.draggingPackIndex = null;
+}
+
+function bmDropOnDiscardZone(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (bmState.draggingPackIndex === null || bmState.draggingPackIndex === undefined) return;
+  bmDecide(bmState.draggingPackIndex, 'discard');
+  bmState.draggingPackIndex = null;
+}
+
+function bmDropOnSideboardFromPack(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (bmState.draggingPackIndex === null || bmState.draggingPackIndex === undefined) return;
+  bmDecide(bmState.draggingPackIndex, 'sideboard');
+  bmState.draggingPackIndex = null;
 }
 
 async function bmRerollPack() {
@@ -1275,11 +1359,12 @@ async function bmRerollPack() {
 }
 
 function bmApplyPack() {
-  let kept = 0, sideboarded = 0;
+  // Sideboard decisions already committed immediately when chosen — only "keep" needs
+  // committing here, since kept cards sit in the tray as a staged, reversible choice
+  // until you're ready to move on.
+  let kept = 0;
   bmState.currentPack.forEach((c, i) => {
-    const decision = bmState.packDecisions[i];
-    if (decision === 'keep') { bmState.draftCards.push(c.name); kept++; }
-    else if (decision === 'sideboard') { bmState.sideboard.push({ name: c.name, from: bmState.packCategory }); sideboarded++; }
+    if (bmState.packDecisions[i] === 'keep') { bmState.draftCards.push(c.name); kept++; }
   });
   bmState.currentPack = null;
   bmState.packCategory = null;
