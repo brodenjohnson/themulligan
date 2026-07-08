@@ -223,6 +223,7 @@
   .bm-sideboard-rail.split-mode .bm-sb-body { flex: 1; overflow-y: auto; }
 
   .bm-sort-select { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 11px; padding: 6px 10px; border-radius: 7px; }
+  .bm-sort-select option { background: #1a1a22; color: #fff; }
   .bm-owned-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(255,255,255,0.7); cursor: pointer; margin-right: 10px; white-space: nowrap; }
   .bm-owned-toggle input { width: auto; margin: 0; }
   .bm-browse-list { display: flex; flex-direction: column; max-height: 70vh; overflow-y: auto; max-width: 640px; }
@@ -1426,12 +1427,22 @@ function bmToggleBrowseOwnedOnly(checked) {
 }
 
 
-function bmViewPile(key) {
+async function bmViewPile(key) {
   if (key === 'lands' && bmState.draftCards.length < 90) {
     alert("Lands unlock once your deck is closer to 100 cards — they're always the last step.");
     return;
   }
   bmState.viewingPile = key;
+  // Extra safety net beyond the enterBuildMode() check — if any card in this specific
+  // pile is somehow still missing its Scryfall data, catch it here before rendering
+  // rather than showing blank cards.
+  const pileCards = bmState.piles[key]?.cards || [];
+  const missingNames = pileCards.filter(n => !cardLookup(n));
+  if (missingNames.length > 0) {
+    console.warn('Build Mode: fetching missing card data for pile', key, missingNames);
+    const fetched = await TM.fetchScryfallBulk(missingNames);
+    Object.assign(state.cardData, fetched);
+  }
   renderBmMain();
 }
 
@@ -1482,8 +1493,7 @@ function renderBmBrowse() {
         ${Object.entries(sortLabels).map(([v, l]) => `<option value="${v}" ${bmState.browseSort === v ? 'selected' : ''}>Sort: ${l}</option>`).join('')}
       </select>
     </div>
-    <div class="bm-browse-list">${rowsHtml || '<div class="bm-pile-empty-note">No matching cards found in the community data for this role.</div>'}</div>
-  `;
+    <div class="bm-browse-list">${rowsHtml || `<div class="bm-pile-empty-note">No community data found for this role. This usually means the commander is too new for Recommander's database to have caught up yet — try "Open a pack" instead, which reasons directly from the commander's card text rather than relying on community data.</div>`}</div>`;
   renderBmSideboardRail();
 }
 
