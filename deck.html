@@ -759,7 +759,7 @@ function switchTab(tab) {
 // state.cards directly. Nothing touches your actual saved deck until a real Lock In step
 // exists, so you can freely experiment (swap cards, open packs, reroll) without any risk
 // to the live deck. Exiting Build Mode without locking in simply discards the draft.
-let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null };
+let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null, seenInThisPackSession: [] };
 
 function bmClassifyCard(name) {
   const d = cardLookup(name);
@@ -1170,6 +1170,7 @@ async function bmOpenPack(pileKey) {
   }
   bmState.packCategory = pileKey;
   bmState.packDecisions = {};
+  bmState.seenInThisPackSession = []; // fresh session — rerolls within it will keep building on this
   document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:rgba(255,255,255,0.5);"><span class="spinner" style="margin-right:10px;"></span> Opening a pack for ${pile.label}...</div>`;
   bmState.currentPack = await bmGeneratePack(pileKey);
   renderBmMain();
@@ -1219,6 +1220,10 @@ async function bmGeneratePack(pileKey) {
     ? '\nBuild preference: the user wants the objectively best cards regardless of what they already own — ownership should not influence your picks at all.'
     : '\nBuild preference: a natural mix — favour owned cards when they are genuinely good fits, but don\'t hesitate to suggest strong unowned cards too.';
 
+  const alreadySeenLine = bmState.seenInThisPackSession.length > 0
+    ? `\nAlready shown in this pack session — do NOT suggest any of these again, the user has already seen and decided on them: ${bmState.seenInThisPackSession.join(', ')}`
+    : '';
+
   const prompt = `Commander deck: "${bmState.draftCards[0].split(' // ')[0]}"
 Colour identity: ${guildName}
 Current decklist (${bmState.draftCards.length} cards — never suggest any of these): ${bmState.draftCards.join(', ')}
@@ -1227,12 +1232,13 @@ Owned cards not in this deck (colour-filtered): ${ownedFiltered.slice(0, 300).jo
 ${communityLine}
 ${budgetLine}
 ${prefLine}
+${alreadySeenLine}
 
 This deck's "${pile.label}" pile currently has ${pile.cards.length} cards and needs roughly ${Math.max(0, pile.target - pile.cards.length)} more to be healthy.
 Suggest exactly 10 real, verified Magic: The Gathering cards that fill the "${pile.label}" role specifically for this deck, in ${guildName} colours only.
 Give real weight to the community data above where it's relevant to this pile's role — a card lots of real decks with this commander actually run is a stronger signal than pure theory.
 For the "score" field: 90+ means it appears in the real community data above AND fits this pile; 70-89 means strong theoretical fit but not confirmed by community data; below 70 means a speculative or synergy-dependent pick. Be honest and varied — not everything is a 90.
-CRITICAL: Only real printed cards. Never suggest anything already in the current decklist.
+CRITICAL: Only real printed cards. Never suggest anything already in the current decklist or already shown in this pack session.
 Return JSON only, no markdown. Keep each reason to 8 words or fewer:
 {"cards":[{"name":"Card","reason":"short reason","score":85}]}`;
 
@@ -1244,7 +1250,11 @@ Return JSON only, no markdown. Keep each reason to 8 words or fewer:
   });
   const raw = data.content?.[0]?.text || '{}';
   const parsed = safeParseAIJson(raw);
-  const candidates = (parsed.cards || []).filter(c => !deckCardsLower.has(c.name.split(' // ')[0].toLowerCase().trim()));
+  const seenLower = new Set(bmState.seenInThisPackSession.map(n => n.toLowerCase()));
+  const candidates = (parsed.cards || []).filter(c =>
+    !deckCardsLower.has(c.name.split(' // ')[0].toLowerCase().trim()) &&
+    !seenLower.has(c.name.toLowerCase())
+  );
 
   const names = candidates.map(c => c.name);
   const verifiedData = names.length > 0 ? await TM.fetchScryfallBulk(names) : {};
@@ -1252,7 +1262,9 @@ Return JSON only, no markdown. Keep each reason to 8 words or fewer:
   const ownedFilteredLower = new Set(ownedFiltered.map(n => n.toLowerCase()));
   const verified = candidates.filter(c => verifiedData[c.name.toLowerCase()] || verifiedData[c.name.split(' // ')[0].toLowerCase().trim()]);
 
-  return verified.slice(0, 10).map(c => ({ ...c, owned: state.collection.has(c.name.toLowerCase()) || ownedFilteredLower.has(c.name.toLowerCase()) }));
+  const result = verified.slice(0, 10).map(c => ({ ...c, owned: state.collection.has(c.name.toLowerCase()) || ownedFilteredLower.has(c.name.toLowerCase()) }));
+  bmState.seenInThisPackSession.push(...result.map(c => c.name));
+  return result;
 }
 
 function renderBmPack() {
