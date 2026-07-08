@@ -598,8 +598,13 @@ async function scratchSelectCommander(name) {
     if (!card) { previewEl.innerHTML = `<div style="font-size:12px;color:var(--pink);">Couldn't find that card.</div>`; return; }
     const img = card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || '';
     const isLegendaryCreature = (card.type_line || '').includes('Legendary') && ((card.type_line || '').includes('Creature') || (card.oracle_text || '').toLowerCase().includes('can be your commander'));
+    const oracleText = card.card_faces
+      ? card.card_faces.map(f => `${f.name} (${f.type_line}): ${f.oracle_text || ''}`).join('\n')
+      : (card.oracle_text || '');
     scratchState.commander = card.name;
     scratchState.colorIdentity = card.color_identity || [];
+    scratchState.commanderOracleText = oracleText;
+    scratchState.commanderTypeLine = card.type_line || '';
     previewEl.innerHTML = `<div class="scratch-commander-card">
       ${img ? `<img src="${img}" alt="${card.name}">` : ''}
       <div>
@@ -691,8 +696,12 @@ async function scratchGoToStep2() {
     const res = await fetch('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 500,
-        system: 'You are an MTG Commander deck-building expert. Return only valid JSON, no markdown.',
-        messages: [{ role: 'user', content: `Commander: "${scratchState.commander}". Suggest exactly 4 distinct, plausible deck archetypes/plans this commander genuinely supports, based on its real abilities. Each needs a short punchy label (2-4 words) and a one-sentence plain-language description a new player would understand. Return JSON only: {"options":[{"label":"...","description":"..."}]}` }] }),
+        system: 'You are an MTG Commander deck-building expert. You reason strictly from the actual card text provided to you, never from assumptions about a card\'s name, flavour, or what a similar-sounding card might do. Return only valid JSON, no markdown.',
+        messages: [{ role: 'user', content: `Commander: "${scratchState.commander}"
+Type: ${scratchState.commanderTypeLine || 'Unknown'}
+Actual rules text: ${scratchState.commanderOracleText || 'Not available — reason carefully and conservatively if you are not certain what this card does.'}
+
+Based ONLY on the actual rules text above (not general assumptions about the name or characters involved), suggest exactly 4 distinct, plausible deck archetypes/plans this specific commander genuinely supports through its real printed abilities. Each needs a short punchy label (2-4 words) and a one-sentence plain-language description a new player would understand. If the card's abilities are narrow, it's fine for the 4 options to be closely related rather than wildly different — accuracy matters more than variety. Return JSON only: {"options":[{"label":"...","description":"..."}]}` }] }),
     });
     const data = await res.json();
     const raw = data.content?.[0]?.text || '{}';
