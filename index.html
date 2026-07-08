@@ -44,6 +44,25 @@
   .deck-action-btn { width: 28px; height: 28px; background: rgba(255,255,255,0.92); border: 0.5px solid var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink2); font-size: 13px; transition: all 0.1s; }
   .deck-action-btn:hover { background: #fff; color: var(--black); }
   .deck-action-delete:hover { color: var(--pink); }
+  .scratch-step-dot { height: 4px; flex: 1; border-radius: 2px; background: var(--border); }
+  .scratch-step-dot.done { background: var(--teal); }
+  .scratch-step-dot.current { background: var(--orange); }
+  .add-card-suggestion { padding: 8px 12px; font-size: 13px; cursor: pointer; border-bottom: 0.5px solid var(--bg); }
+  .add-card-suggestion:last-child { border-bottom: none; }
+  .add-card-suggestion:hover { background: rgba(0,212,204,0.06); color: var(--teal); }
+  .scratch-commander-card { display: flex; gap: 12px; align-items: center; background: var(--bg); border-radius: 8px; padding: 10px; }
+  .scratch-commander-card img { width: 60px; border-radius: 6px; }
+  .scratch-plan-option { text-align: left; background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; padding: 12px 14px; cursor: pointer; transition: all 0.15s; }
+  .scratch-plan-option:hover { border-color: var(--teal); }
+  .scratch-plan-option.selected { border-color: var(--teal); background: rgba(0,212,204,0.06); }
+  .scratch-plan-option .label { font-size: 13px; font-weight: 600; color: var(--black); margin-bottom: 2px; }
+  .scratch-plan-option .desc { font-size: 11px; color: var(--ink3); line-height: 1.4; }
+  .scratch-plan-option-other { text-align: left; background: var(--bg); border: 1.5px dashed var(--border2); border-radius: 8px; padding: 10px 14px; cursor: pointer; font-size: 12px; color: var(--ink3); }
+  .scratch-plan-option-other.selected { border-color: var(--orange); color: var(--orange); border-style: solid; }
+  .scratch-choice-btn { flex: 1; background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; padding: 8px 6px; font-size: 12px; font-weight: 600; color: var(--ink2); cursor: pointer; text-align: center; line-height: 1.5; }
+  .scratch-choice-btn span { font-size: 9px; font-weight: 400; color: var(--ink3); }
+  .scratch-choice-btn.selected { border-color: var(--teal); background: rgba(0,212,204,0.08); color: var(--black); }
+  .scratch-choice-btn.small { flex: none; padding: 8px 12px; }
 </style>
 </head>
 <body>
@@ -71,9 +90,14 @@
       <div class="page-title">Your decks</div>
       <div class="page-sub" id="deckSubtitle">Loading...</div>
     </div>
-    <button class="btn btn-primary" onclick="openNewDeckModal()">
-      <i class="ti ti-plus" aria-hidden="true" style="font-size:14px;"></i> New deck
-    </button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost" onclick="openScratchModal()">
+        <i class="ti ti-wand" aria-hidden="true" style="font-size:14px;"></i> Build from scratch
+      </button>
+      <button class="btn btn-primary" onclick="openNewDeckModal()">
+        <i class="ti ti-plus" aria-hidden="true" style="font-size:14px;"></i> Paste a decklist
+      </button>
+    </div>
   </div>
 
   <div id="collectionBar" style="display:none;" class="collection-bar">
@@ -100,6 +124,81 @@
 </div>
 
 <!-- NEW DECK MODAL -->
+<!-- BUILD FROM SCRATCH MODAL -->
+<div class="modal-overlay" id="scratchModal">
+  <div class="modal" style="max-width:520px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+      <div class="scratch-step-dot" id="scratchDot1"></div>
+      <div class="scratch-step-dot" id="scratchDot2"></div>
+      <div class="scratch-step-dot" id="scratchDot3"></div>
+    </div>
+
+    <!-- STEP 1: COMMANDER -->
+    <div id="scratchStep1">
+      <div class="modal-title">Pick your commander</div>
+      <div style="position:relative;">
+        <input type="text" id="scratchCommanderInput" placeholder="Start typing a commander's name..." style="width:100%;" oninput="handleScratchCommanderInput()" autocomplete="off">
+        <div id="scratchCommanderSuggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:0.5px solid var(--border2);border-radius:8px;margin-top:4px;max-height:220px;overflow-y:auto;z-index:10;box-shadow:0 4px 16px rgba(0,0,0,0.1);"></div>
+      </div>
+      <div id="scratchCommanderPreview" style="margin-top:14px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px;">
+        <button class="btn btn-ghost" onclick="closeScratchModal()">Cancel</button>
+        <button class="btn btn-primary" id="scratchStep1Next" onclick="scratchGoToStep2()" disabled>Next →</button>
+      </div>
+    </div>
+
+    <!-- STEP 2: PLAN -->
+    <div id="scratchStep2" style="display:none;">
+      <div class="modal-title">What's the plan?</div>
+      <p style="font-size:12px;color:var(--ink3);margin-bottom:14px;">Based on <strong id="scratchCommanderNameLabel"></strong> — pick a direction, or describe your own.</p>
+      <div id="scratchPlanOptions" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+        <div style="text-align:center;padding:20px;color:var(--ink3);font-size:12px;"><span class="spinner"></span> Thinking of some directions...</div>
+      </div>
+      <textarea id="scratchPlanOther" placeholder="Or describe your own plan..." rows="2" style="width:100%;display:none;margin-bottom:12px;"></textarea>
+      <div style="display:flex;justify-content:space-between;margin-top:8px;">
+        <button class="btn btn-ghost" onclick="scratchBackTo(1)">← Back</button>
+        <button class="btn btn-primary" id="scratchStep2Next" onclick="scratchGoToStep3()" disabled>Next →</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: PREFERENCES -->
+    <div id="scratchStep3" style="display:none;">
+      <div class="modal-title">A few quick preferences</div>
+      <div class="field" style="margin-bottom:14px;">
+        <label style="display:block;font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:6px;">Power level</label>
+        <div style="display:flex;gap:6px;" id="scratchPowerButtons">
+          <button class="scratch-choice-btn" data-power="1" onclick="scratchSetPower(1)">1<br><span>Precon</span></button>
+          <button class="scratch-choice-btn" data-power="2" onclick="scratchSetPower(2)">2<br><span>Upgraded</span></button>
+          <button class="scratch-choice-btn selected" data-power="3" onclick="scratchSetPower(3)">3<br><span>Casual</span></button>
+          <button class="scratch-choice-btn" data-power="4" onclick="scratchSetPower(4)">4<br><span>Optimised</span></button>
+          <button class="scratch-choice-btn" data-power="5" onclick="scratchSetPower(5)">5<br><span>cEDH</span></button>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:14px;">
+        <label style="display:block;font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:6px;">Budget</label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="scratch-choice-btn small selected" data-budget="none" onclick="scratchSetBudget('none')">No cap</button>
+          <button class="scratch-choice-btn small" data-budget="set" onclick="scratchSetBudget('set')">Set a limit</button>
+          <input type="number" id="scratchBudgetInput" placeholder="$ total" style="display:none;width:100px;" oninput="scratchState.budget=this.value">
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:18px;">
+        <label style="display:block;font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:6px;">Building from</label>
+        <div style="display:flex;gap:6px;">
+          <button class="scratch-choice-btn small selected" data-pref="mix" onclick="scratchSetPref('mix')">Mix of both</button>
+          <button class="scratch-choice-btn small" data-pref="collection" onclick="scratchSetPref('collection')">My collection only</button>
+          <button class="scratch-choice-btn small" data-pref="buy" onclick="scratchSetPref('buy')">Best cards, ignore ownership</button>
+        </div>
+      </div>
+      <div id="scratchCreateStatus" style="font-size:12px;color:var(--ink3);margin-bottom:10px;"></div>
+      <div style="display:flex;justify-content:space-between;">
+        <button class="btn btn-ghost" onclick="scratchBackTo(2)">← Back</button>
+        <button class="btn btn-primary" id="scratchCreateBtn" onclick="scratchCreateDeck()">Start building →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="newDeckModal">
   <div class="modal">
     <div class="modal-title">New deck</div>
@@ -407,6 +506,181 @@ function renderCollectionBar(count) {
     document.getElementById('collSub').textContent = 'Upload your collection to see ownership flags on recommendations';
   }
 }
+
+// ===== BUILD FROM SCRATCH =====
+let scratchState = { commander: null, plan: null, planOther: '', power: 3, budget: null, buildPref: 'mix' };
+let scratchDebounce;
+
+function openScratchModal() {
+  scratchState = { commander: null, plan: null, planOther: '', power: 3, budget: null, buildPref: 'mix' };
+  document.getElementById('scratchCommanderInput').value = '';
+  document.getElementById('scratchCommanderPreview').innerHTML = '';
+  document.getElementById('scratchStep1Next').disabled = true;
+  scratchShowStep(1);
+  document.getElementById('scratchModal').classList.add('open');
+  setTimeout(() => document.getElementById('scratchCommanderInput').focus(), 50);
+}
+
+function closeScratchModal() {
+  document.getElementById('scratchModal').classList.remove('open');
+}
+
+function scratchShowStep(n) {
+  [1,2,3].forEach(i => {
+    document.getElementById(`scratchStep${i}`).style.display = i === n ? 'block' : 'none';
+    const dot = document.getElementById(`scratchDot${i}`);
+    dot.className = 'scratch-step-dot' + (i < n ? ' done' : i === n ? ' current' : '');
+  });
+}
+
+function handleScratchCommanderInput() {
+  clearTimeout(scratchDebounce);
+  const query = document.getElementById('scratchCommanderInput').value.trim();
+  const box = document.getElementById('scratchCommanderSuggestions');
+  document.getElementById('scratchStep1Next').disabled = true;
+  if (query.length < 2) { box.style.display = 'none'; return; }
+  scratchDebounce = setTimeout(async () => {
+    try {
+      const res = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      const names = (data.data || []).slice(0, 8);
+      if (names.length === 0) { box.style.display = 'none'; return; }
+      box.innerHTML = names.map(n => `<div class="add-card-suggestion" onclick="scratchSelectCommander('${n.replace(/'/g,"\\'")}')">${n}</div>`).join('');
+      box.style.display = 'block';
+    } catch (e) { box.style.display = 'none'; }
+  }, 200);
+}
+
+async function scratchSelectCommander(name) {
+  document.getElementById('scratchCommanderInput').value = name;
+  document.getElementById('scratchCommanderSuggestions').style.display = 'none';
+  const previewEl = document.getElementById('scratchCommanderPreview');
+  previewEl.innerHTML = `<div style="text-align:center;padding:10px;"><span class="spinner"></span></div>`;
+  try {
+    const res = await fetch('https://api.scryfall.com/cards/collection', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifiers: [{ name }] }),
+    });
+    const data = await res.json();
+    const card = data.data?.[0];
+    if (!card) { previewEl.innerHTML = `<div style="font-size:12px;color:var(--pink);">Couldn't find that card.</div>`; return; }
+    const img = card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || '';
+    const isLegendaryCreature = (card.type_line || '').includes('Legendary') && ((card.type_line || '').includes('Creature') || (card.oracle_text || '').toLowerCase().includes('can be your commander'));
+    scratchState.commander = card.name;
+    scratchState.colorIdentity = card.color_identity || [];
+    previewEl.innerHTML = `<div class="scratch-commander-card">
+      ${img ? `<img src="${img}" alt="${card.name}">` : ''}
+      <div>
+        <div style="font-weight:700;font-size:14px;">${card.name}</div>
+        <div style="font-size:11px;color:var(--ink3);">${card.type_line || ''}</div>
+        ${!isLegendaryCreature ? '<div style="font-size:11px;color:var(--orange);margin-top:4px;">⚠ Doesn\'t look like a typical commander — you can still proceed if this is correct.</div>' : ''}
+      </div>
+    </div>`;
+    document.getElementById('scratchStep1Next').disabled = false;
+  } catch (e) {
+    previewEl.innerHTML = `<div style="font-size:12px;color:var(--pink);">Error: ${e.message}</div>`;
+  }
+}
+
+async function scratchGoToStep2() {
+  scratchShowStep(2);
+  document.getElementById('scratchCommanderNameLabel').textContent = scratchState.commander;
+  const optionsEl = document.getElementById('scratchPlanOptions');
+  optionsEl.innerHTML = `<div style="text-align:center;padding:20px;color:var(--ink3);font-size:12px;"><span class="spinner"></span> Thinking of some directions...</div>`;
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 500,
+        system: 'You are an MTG Commander deck-building expert. Return only valid JSON, no markdown.',
+        messages: [{ role: 'user', content: `Commander: "${scratchState.commander}". Suggest exactly 4 distinct, plausible deck archetypes/plans this commander genuinely supports, based on its real abilities. Each needs a short punchy label (2-4 words) and a one-sentence plain-language description a new player would understand. Return JSON only: {"options":[{"label":"...","description":"..."}]}` }] }),
+    });
+    const data = await res.json();
+    const raw = data.content?.[0]?.text || '{}';
+    let parsed;
+    try { parsed = JSON.parse(raw.replace(/```json|```/g,'').trim()); } catch { parsed = { options: [] }; }
+    const options = parsed.options || [];
+    optionsEl.innerHTML = options.map((o, i) => `<div class="scratch-plan-option" onclick="scratchSelectPlan(${i}, '${o.label.replace(/'/g,"\\'")}')" id="scratchPlan${i}">
+      <div class="label">${o.label}</div>
+      <div class="desc">${o.description}</div>
+    </div>`).join('') + `<div class="scratch-plan-option-other" id="scratchPlanOtherToggle" onclick="scratchToggleOther()">Something else — I'll describe it myself</div>`;
+  } catch (e) {
+    optionsEl.innerHTML = `<div style="font-size:12px;color:var(--pink);">Couldn't generate plan options. You can still describe your own below.</div>`;
+    document.getElementById('scratchPlanOther').style.display = 'block';
+  }
+}
+
+function scratchSelectPlan(i, label) {
+  document.querySelectorAll('.scratch-plan-option').forEach(el => el.classList.remove('selected'));
+  document.getElementById('scratchPlanOtherToggle')?.classList.remove('selected');
+  document.getElementById(`scratchPlan${i}`).classList.add('selected');
+  document.getElementById('scratchPlanOther').style.display = 'none';
+  scratchState.plan = label;
+  document.getElementById('scratchStep2Next').disabled = false;
+}
+
+function scratchToggleOther() {
+  document.querySelectorAll('.scratch-plan-option').forEach(el => el.classList.remove('selected'));
+  document.getElementById('scratchPlanOtherToggle').classList.add('selected');
+  const textarea = document.getElementById('scratchPlanOther');
+  textarea.style.display = 'block';
+  textarea.focus();
+  textarea.oninput = () => {
+    scratchState.plan = textarea.value.trim();
+    document.getElementById('scratchStep2Next').disabled = scratchState.plan.length === 0;
+  };
+}
+
+function scratchGoToStep3() {
+  scratchShowStep(3);
+}
+
+function scratchBackTo(n) {
+  scratchShowStep(n);
+}
+
+function scratchSetPower(p) {
+  scratchState.power = p;
+  document.querySelectorAll('#scratchPowerButtons .scratch-choice-btn').forEach(b => b.classList.toggle('selected', Number(b.dataset.power) === p));
+}
+
+function scratchSetBudget(mode) {
+  document.querySelectorAll('[data-budget]').forEach(b => b.classList.toggle('selected', b.dataset.budget === mode));
+  document.getElementById('scratchBudgetInput').style.display = mode === 'set' ? 'block' : 'none';
+  if (mode === 'none') scratchState.budget = null;
+}
+
+function scratchSetPref(pref) {
+  scratchState.buildPref = pref;
+  document.querySelectorAll('[data-pref]').forEach(b => b.classList.toggle('selected', b.dataset.pref === pref));
+}
+
+async function scratchCreateDeck() {
+  const btn = document.getElementById('scratchCreateBtn');
+  const statusEl = document.getElementById('scratchCreateStatus');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Creating...';
+  try {
+    const id = await TM.saveDeck({
+      name: scratchState.commander,
+      commander: scratchState.commander,
+      cardlist: scratchState.commander,
+      theme: scratchState.plan,
+      power_level: scratchState.power,
+      budget: scratchState.budget ? Number(scratchState.budget) : null,
+      build_preference: scratchState.buildPref,
+    });
+    window.location.href = `/deck/${id}?fresh=1`;
+  } catch (e) {
+    statusEl.style.color = 'var(--pink)';
+    statusEl.textContent = 'Failed to create deck: ' + e.message;
+    btn.disabled = false;
+    btn.textContent = 'Start building →';
+  }
+}
+
+document.addEventListener('click', e => {
+  if (e.target === document.getElementById('scratchModal')) closeScratchModal();
+});
 
 function openNewDeckModal() {
   document.getElementById('newDeckModal').classList.add('open');
