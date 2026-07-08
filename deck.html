@@ -248,6 +248,21 @@
   .bm-pile-detail-img img { width: 100%; height: 100%; object-fit: cover; }
   .bm-pile-detail-actions { display: flex; gap: 4px; }
   .bm-secondary-tags { font-size: 9px; color: var(--teal); margin-bottom: 4px; line-height: 1.3; }
+  .bm-find-combos-btn { width: 100%; margin-top: 8px; background: rgba(0,212,204,0.1); border: 1px dashed rgba(0,212,204,0.35); color: var(--teal); font-size: 11px; font-weight: 600; padding: 8px; border-radius: 7px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .bm-find-combos-btn:hover { background: rgba(0,212,204,0.18); }
+
+  .bm-combo-browser-list { display: flex; flex-direction: column; gap: 14px; max-width: 700px; }
+  .bm-combo-browser-row { display: flex; gap: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; }
+  .bm-combo-browser-cards { display: flex; gap: 6px; flex-shrink: 0; }
+  .bm-combo-browser-card { width: 70px; aspect-ratio: 5/7; border-radius: 6px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.12); cursor: pointer; font-size: 8px; color: rgba(255,255,255,0.4); text-align: center; display: flex; align-items: center; justify-content: center; padding: 4px; }
+  .bm-combo-browser-card img { width: 100%; height: 100%; object-fit: cover; }
+  .bm-combo-browser-card.missing { border-color: rgba(255,59,107,0.5); }
+  .bm-combo-browser-card.owned { border-color: rgba(0,212,204,0.5); }
+  .bm-combo-browser-info { flex: 1; }
+  .bm-combo-browser-result { font-size: 13px; font-weight: 700; color: var(--teal); margin-bottom: 4px; }
+  .bm-combo-browser-missing { font-size: 11px; color: var(--pink); margin-bottom: 6px; }
+  .bm-combo-browser-note { font-size: 11px; color: rgba(255,255,255,0.55); font-style: italic; margin-bottom: 8px; }
+  .bm-add-combo-btn { background: linear-gradient(90deg, var(--teal), #00b8b0); color: #061716; border: none; font-size: 11px; font-weight: 700; padding: 7px 14px; border-radius: 7px; cursor: pointer; }
   .bm-pile-detail-actions button { flex: 1; padding: 5px 0; border-radius: 5px; font-size: 9px; font-weight: 700; border: none; cursor: pointer; }
   .bm-remove-btn { background: rgba(255,59,107,0.15); color: var(--pink); }
   .bm-side-btn { background: rgba(245,166,35,0.15); color: var(--orange); }
@@ -761,7 +776,7 @@ function switchTab(tab) {
 // state.cards directly. Nothing touches your actual saved deck until a real Lock In step
 // exists, so you can freely experiment (swap cards, open packs, reroll) without any risk
 // to the live deck. Exiting Build Mode without locking in simply discards the draft.
-let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null, seenInThisPackSession: [], cardTags: {} };
+let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null, seenInThisPackSession: [], cardTags: {}, comboResults: [] };
 
 // Category keyword sets — used for BOTH primary pile assignment and secondary tag
 // detection, so a card can be filed under one pile but flagged as "also relevant to"
@@ -942,6 +957,116 @@ function bmSelectArt(printing) {
   renderBmMain();
 }
 
+/* ===== FIND COMBOS ===== */
+async function bmFindCombos() {
+  bmState.viewingPile = null;
+  document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:rgba(255,255,255,0.5);"><span class="spinner" style="margin-right:10px;"></span> Searching Commander Spellbook for real combos in your current draft...</div>`;
+  try {
+    const basics = ['swamp','island','mountain','forest','plains'];
+    const commanderName = bmState.draftCards[0].split(' // ')[0].trim();
+    const deckMain = [...new Set(bmState.draftCards.slice(1).filter(c => !basics.includes(c.toLowerCase())).map(c => c.split(' // ')[0].trim()))];
+    const draftCardsLower = new Set(bmState.draftCards.map(c => c.split(' // ')[0].toLowerCase().trim()));
+
+    const results = await fetchCombosData(deckMain, commanderName);
+    const almost = (results.almostIncluded || []);
+    function getMissing(combo) {
+      return comboGetCards(combo).filter(name => !draftCardsLower.has(name.split(' // ')[0].toLowerCase().trim()));
+    }
+    const nearMiss = almost.filter(c => { const m = getMissing(c); return m.length >= 1 && m.length <= 2; }).slice(0, 20);
+
+    if (nearMiss.length === 0) {
+      bmState.comboResults = [];
+      renderBmCombosBrowser();
+      return;
+    }
+
+    // Optional: ask Claude to explain relevance to the deck's stated plan — reasoning
+    // over the REAL combos found above, never inventing new ones, matching the same
+    // grounding rule as everything else in Build Mode.
+    let relevance = {};
+    if (state.deck?.theme) {
+      try {
+        const summaryList = nearMiss.map((c, i) => `${i}: ${comboGetCards(c).join(' + ')} → ${comboGetResult(c)} (missing: ${getMissing(c).join(', ')})`).join('\n');
+        const data = await safeFetchJson('/api/chat', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 700,
+            system: 'You explain how REAL, already-confirmed Magic combos relate to a stated deck plan. You never invent combos or cards — only comment on the ones given to you. Return only valid JSON, no markdown.',
+            messages: [{ role: 'user', content: `Deck's stated plan: "${state.deck.theme}"\n\nReal combos found for this deck (index: combo):\n${summaryList}\n\nFor each index, write one short sentence on how well it fits the stated plan (or note if it's an unrelated bonus line). Return JSON only: {"notes":{"0":"...","1":"..."}}` }] }),
+        });
+        const raw = data.content?.[0]?.text || '{}';
+        const parsed = safeParseAIJson(raw);
+        relevance = parsed.notes || {};
+      } catch (e) { console.warn('Combo relevance pass failed, showing combos without it', e); }
+    }
+
+    bmState.comboResults = nearMiss.map((c, i) => ({
+      combo: c,
+      cards: comboGetCards(c),
+      missing: getMissing(c),
+      result: comboGetResult(c),
+      note: relevance[i] || '',
+    }));
+    renderBmCombosBrowser();
+  } catch (e) {
+    document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:var(--pink);text-align:center;padding:0 40px;">Couldn't search for combos: ${e.message}</div>`;
+  }
+}
+
+function renderBmCombosBrowser() {
+  const results = bmState.comboResults || [];
+  const cardsHtml = results.map((r, i) => {
+    const cardImgs = r.cards.slice(0, 4).map(name => {
+      const isMissing = r.missing.includes(name);
+      const owned = isMissing && (state.collection.has(name.toLowerCase()) || bmState.ownedFilteredCache?.some(n => n.toLowerCase() === name.toLowerCase()));
+      const d = cardLookup(name);
+      const img = d?.image_uris?.normal || '';
+      return `<div class="bm-combo-browser-card ${isMissing ? (owned ? 'owned' : 'missing') : ''}" onclick="openCardModal('${name.replace(/'/g,"\\'")}')" title="${name}">
+        ${img ? `<img src="${img}" alt="${name}">` : name}
+      </div>`;
+    }).join('');
+    return `<div class="bm-combo-browser-row">
+      <div class="bm-combo-browser-cards">${cardImgs}</div>
+      <div class="bm-combo-browser-info">
+        <div class="bm-combo-browser-result">${r.result}</div>
+        <div class="bm-combo-browser-missing">Missing: ${r.missing.map(m => {
+          const owned = state.collection.has(m.toLowerCase()) || bmState.ownedFilteredCache?.some(n => n.toLowerCase() === m.toLowerCase());
+          return `${m}${owned ? ' (owned)' : ''}`;
+        }).join(', ')}</div>
+        ${r.note ? `<div class="bm-combo-browser-note">${r.note}</div>` : ''}
+        <button class="bm-add-combo-btn" onclick="bmAddComboPieces(${i})">+ Add missing piece${r.missing.length > 1 ? 's' : ''} to deck</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('bmMain').innerHTML = `
+    <div class="bm-back-row">
+      <button class="bm-back-btn" onclick="renderBmMain();"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
+      <div>
+        <div class="bm-commander-name">Combos found in your draft</div>
+        <div class="bm-commander-sub">${results.length} real combo${results.length !== 1 ? 's' : ''} you're one or two cards away from, straight from Commander Spellbook</div>
+      </div>
+    </div>
+    ${results.length > 0 ? `<div class="bm-combo-browser-list">${cardsHtml}</div>` : `<div class="bm-pile-empty-note">No near-miss combos found in your current draft. Add more cards and try again.</div>`}
+  `;
+}
+
+function bmAddComboPieces(i) {
+  const r = bmState.comboResults[i];
+  const added = [];
+  r.missing.forEach(name => {
+    if (!bmState.draftCards.some(c => c.toLowerCase() === name.toLowerCase())) {
+      bmState.draftCards.push(name);
+      added.push(name);
+    }
+  });
+  bmState.comboResults.splice(i, 1);
+  bmState.piles = bmBuildPiles();
+  renderBmCombosBrowser();
+  renderBmHud();
+  bmAutoSave();
+  if (added.length > 0) bmShowToast(`Added ${added.join(', ')} — combo ready!`);
+}
+
 function bmToggleAccordion(name) {
   if (name === 'combos') bmState.combosOpen = !bmState.combosOpen;
   if (name === 'types') bmState.typesOpen = !bmState.typesOpen;
@@ -1010,7 +1135,10 @@ function renderBmHud() {
     </div>
     <div class="bm-accordion ${bmState.combosOpen ? 'open' : ''}">
       <div class="bm-accordion-header" onclick="bmToggleAccordion('combos')"><span><i class="ti ti-affiliate" aria-hidden="true"></i> Combos</span><span class="bm-accordion-chevron">⌄</span></div>
-      <div class="bm-accordion-body" id="bmCombosBody">${renderBmCombosList()}</div>
+      <div class="bm-accordion-body" id="bmCombosBody">
+        ${renderBmCombosList()}
+        <button class="bm-find-combos-btn" onclick="bmFindCombos()"><i class="ti ti-search" aria-hidden="true"></i> Find me some combos</button>
+      </div>
     </div>
     <div class="bm-accordion ${bmState.typesOpen ? 'open' : ''}">
       <div class="bm-accordion-header" onclick="bmToggleAccordion('types')"><span><i class="ti ti-cards" aria-hidden="true"></i> Card types</span><span class="bm-accordion-chevron">⌄</span></div>
