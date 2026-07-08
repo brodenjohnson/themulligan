@@ -1374,9 +1374,16 @@ function bmDropOnSideboardFromPack(e) {
 }
 
 async function bmRerollPack() {
+  // Kept cards are a real decision you already made — a reroll should only replace the
+  // undecided cards still in your hand, never the ones you've already chosen to keep.
+  const keptCards = bmState.currentPack.filter((c, i) => bmState.packDecisions[i] === 'keep');
   document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:rgba(255,255,255,0.5);"><span class="spinner" style="margin-right:10px;"></span> Rerolling...</div>`;
-  bmState.currentPack = await bmGeneratePack(bmState.packCategory);
+  const fresh = await bmGeneratePack(bmState.packCategory);
+  const keptNamesLower = new Set(keptCards.map(c => c.name.toLowerCase()));
+  const freshFiltered = fresh.filter(c => !keptNamesLower.has(c.name.toLowerCase()));
+  bmState.currentPack = [...keptCards, ...freshFiltered];
   bmState.packDecisions = {};
+  keptCards.forEach((c, i) => { bmState.packDecisions[i] = 'keep'; });
   renderBmMain();
 }
 
