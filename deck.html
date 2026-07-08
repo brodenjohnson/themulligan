@@ -636,6 +636,14 @@ async function init() {
     } else {
       startChat();
     }
+
+    // A deck created via "Build from scratch" lands here with only the commander in the
+    // list — jump straight into Build Mode instead of showing an empty-looking Cards tab.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('fresh') === '1') {
+      history.replaceState(null, '', window.location.pathname);
+      enterBuildMode();
+    }
   } catch (e) {
     console.error(e);
     const errBody = document.getElementById('cardsBody');
@@ -986,10 +994,25 @@ async function bmGeneratePack(pileKey) {
   const colorData = await TM.getColorIdentities(ownedRaw);
   const ownedFiltered = TM.filterByColorIdentity(ownedRaw, commanderColors, colorData);
 
+  const budget = state.deck?.budget;
+  const spentSoFar = bmState.draftCards.reduce((sum, c) => sum + parseFloat(cardLookup(c)?.prices?.usd || 0), 0);
+  const remaining = budget ? Math.max(0, budget - spentSoFar) : null;
+  const budgetLine = budget
+    ? `\nBudget: this deck has a total budget of $${budget}. Roughly $${spentSoFar.toFixed(0)} has been spent so far, leaving about $${remaining.toFixed(0)} for the rest of the deck. Favour cards priced sensibly within that remaining budget — don't suggest expensive staples that would blow it.`
+    : '';
+  const prefLine = state.deck?.build_preference === 'collection'
+    ? '\nBuild preference: the user wants to build almost entirely from cards they already own — heavily favour the Owned Cards list below, only reaching outside it if there is truly no reasonable owned option.'
+    : state.deck?.build_preference === 'buy'
+    ? '\nBuild preference: the user wants the objectively best cards regardless of what they already own — ownership should not influence your picks at all.'
+    : '\nBuild preference: a natural mix — favour owned cards when they are genuinely good fits, but don\'t hesitate to suggest strong unowned cards too.';
+
   const prompt = `Commander deck: "${bmState.draftCards[0].split(' // ')[0]}"
 Colour identity: ${guildName}
 Current decklist (${bmState.draftCards.length} cards — never suggest any of these): ${bmState.draftCards.join(', ')}
+Deck's overall plan: ${state.deck?.theme || 'Not specified — infer from the commander and decklist'}
 Owned cards not in this deck (colour-filtered): ${ownedFiltered.slice(0, 300).join(', ') || 'none tracked'}
+${budgetLine}
+${prefLine}
 
 This deck's "${pile.label}" pile currently has ${pile.cards.length} cards and needs roughly ${Math.max(0, pile.target - pile.cards.length)} more to be healthy.
 Suggest exactly 10 real, verified Magic: The Gathering cards that fill the "${pile.label}" role specifically for this deck, in ${guildName} colours only.
@@ -1023,6 +1046,7 @@ function renderBmPack() {
     const decided = !!decision;
     const d = cardLookup(c.name);
     const img = d?.image_uris?.normal || '';
+    const price = parseFloat(d?.prices?.usd || 0);
     const tagText = decision === 'keep' ? 'KEPT' : decision === 'discard' ? 'DISCARDED' : decision === 'sideboard' ? 'SIDEBOARDED' : '';
     return `<div class="bm-pack-card">
       <div class="bm-pack-card-img ${decided ? 'decided' : ''}" onclick="openCardModal('${c.name.replace(/'/g,"\\'")}')">
@@ -1030,6 +1054,9 @@ function renderBmPack() {
         ${decided ? `<div class="bm-pack-decided-tag">${tagText}</div><div class="bm-undo-btn" onclick="event.stopPropagation();bmUndoDecision(${i})">Undo</div>` : ''}
         ${c.owned ? `<div class="bm-pack-owned">✓</div>` : ''}
         <div class="bm-pack-score">${c.score || '?'}</div>
+      </div>
+      <div style="display:flex;justify-content:center;gap:6px;margin-bottom:3px;">
+        ${!c.owned && price > 0 ? `<span style="font-size:10px;color:var(--orange);font-weight:600;">$${price.toFixed(2)}</span>` : ''}
       </div>
       <div style="font-size:10px;color:rgba(255,255,255,0.5);text-align:center;margin-bottom:6px;height:26px;overflow:hidden;">${c.reason || ''}</div>
       <div class="bm-pack-actions">
