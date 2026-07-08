@@ -1567,15 +1567,14 @@ function bmDropOnSideboardFromPack(e) {
 async function bmRerollPack() {
   // Kept cards are a real decision you already made — a reroll should only replace the
   // undecided cards still in your hand, never the ones you've already chosen to keep.
-  // Total hand size is capped at 10 (kept + fresh) so it never grows unbounded across
-  // repeated rerolls — an overcrowded fanned hand makes individual cards hard to click
-  // or drag accurately, which can look like "keeping isn't working" when it's really a
-  // misclick on an overlapping neighbour.
+  // The fresh hand always gets a full new batch regardless of how many you've kept —
+  // the kept tray below uses a normal wrapping layout (not the fanned hand), so it can
+  // grow without the overcrowding/misclick problem a big fanned hand would have.
   const keptCards = bmState.currentPack.filter((c, i) => bmState.packDecisions[i] === 'keep');
   document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:rgba(255,255,255,0.5);"><span class="spinner" style="margin-right:10px;"></span> Rerolling...</div>`;
   const fresh = await bmGeneratePack(bmState.packCategory);
   const keptNamesLower = new Set(keptCards.map(c => c.name.toLowerCase()));
-  const freshFiltered = fresh.filter(c => !keptNamesLower.has(c.name.toLowerCase())).slice(0, Math.max(0, 10 - keptCards.length));
+  const freshFiltered = fresh.filter(c => !keptNamesLower.has(c.name.toLowerCase()));
   bmState.currentPack = [...keptCards, ...freshFiltered];
   bmState.packDecisions = {};
   keptCards.forEach((c, i) => { bmState.packDecisions[i] = 'keep'; });
