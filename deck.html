@@ -226,19 +226,19 @@
   .bm-sort-select option { background: #1a1a22; color: #fff; }
   .bm-owned-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(255,255,255,0.7); cursor: pointer; margin-right: 10px; white-space: nowrap; }
   .bm-owned-toggle input { width: auto; margin: 0; }
-  .bm-browse-list { display: flex; flex-direction: column; max-height: 70vh; overflow-y: auto; max-width: 640px; }
-  .bm-browse-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); cursor: grab; transition: background 0.1s; }
-  .bm-browse-row:hover { background: rgba(255,255,255,0.03); }
-  .bm-browse-thumb { width: 70px; height: 98px; border-radius: 6px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.12); flex-shrink: 0; cursor: pointer; margin-top: -21px; margin-bottom: -21px; z-index: 1; }
-  .bm-browse-row:hover .bm-browse-thumb { transform: scale(2.1) translateX(35px); z-index: 20; transition: transform 0.12s; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+  .bm-browse-list { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; max-height: 78vh; overflow-y: auto; padding-right: 6px; }
+  .bm-browse-row { display: flex; flex-direction: column; cursor: grab; }
+  .bm-browse-thumb { width: 100%; aspect-ratio: 5/7; border-radius: 10px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.15); cursor: pointer; margin-bottom: 8px; transition: transform 0.15s, box-shadow 0.15s; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  .bm-browse-row:hover .bm-browse-thumb { transform: translateY(-4px); box-shadow: 0 10px 24px rgba(0,0,0,0.5); }
   .bm-browse-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .bm-browse-info { flex: 1; min-width: 0; }
-  .bm-browse-name { font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bm-browse-meta { display: flex; gap: 8px; font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+  .bm-browse-info { margin-bottom: 8px; }
+  .bm-browse-name { font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bm-browse-meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 3px; }
   .bm-browse-match { color: var(--teal); font-weight: 600; }
   .bm-browse-owned { color: var(--teal); }
   .bm-browse-price { color: var(--orange); }
-  .bm-browse-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .bm-browse-actions { display: flex; gap: 6px; }
+  .bm-browse-actions .bm-pack-action { flex: 1; padding: 7px 0; }
   .bm-sideboard-rail.collapsed { width: 46px; padding: 14px 8px; overflow: hidden; }
   .bm-sb-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
   .bm-sb-header-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--orange); white-space: nowrap; }
@@ -867,6 +867,11 @@ function bmBuildPiles() {
 
 async function enterBuildMode() {
   document.getElementById('buildModeScreen').classList.add('open');
+  // The main Combos tab's search runs in the background on page load and can still be
+  // in flight when Build Mode opens — without waiting for it, the accordion would show
+  // "no combos" for a deck that genuinely has some, simply because they hadn't finished
+  // loading yet (the same race already handled for the Ask Urza chat elsewhere in this file).
+  await Promise.resolve(state.combosPromise).catch(() => {});
   const draft = state.deck?.build_draft;
   let resumed = false;
   if (draft && Array.isArray(draft.draftCards) && draft.draftCards.length > 0) {
@@ -1402,7 +1407,8 @@ async function bmBrowseAll(pileKey) {
     const ownedFiltered = bmState.ownedFilteredCache || [];
     const ownedLower = new Set(ownedFiltered.map(n => n.toLowerCase()));
     bmState.browseResults = filtered.map(c => ({ ...c, owned: state.collection.has(c.name.toLowerCase()) || ownedLower.has(c.name.toLowerCase()) }));
-    bmSortBrowseResults();
+    bmSortBrowseResults(); // sort by real relevance score first...
+    bmState.browseResults = bmState.browseResults.slice(0, 50); // ...then cap, so we keep the best 50, not an arbitrary 50
     renderBmBrowse();
   } catch (e) {
     document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:var(--pink);text-align:center;padding:0 40px;">Couldn't load Browse All: ${e.message}</div>`;
