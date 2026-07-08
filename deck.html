@@ -216,6 +216,26 @@
   /* ===== SIDEBOARD RIGHT RAIL ===== */
   .bm-sideboard-rail { width: 245px; flex-shrink: 0; background: rgba(255,255,255,0.03); border-left: 1px solid rgba(245,166,35,0.2); padding: 14px 12px; display: flex; flex-direction: column; gap: 10px; z-index: 5; overflow-y: auto; transition: width 0.2s, padding 0.2s; }
   .bm-sideboard-rail.drag-over { background: rgba(245,166,35,0.1); border-left-color: var(--orange); }
+  .bm-keep-zone { flex: 2; border: 2px dashed rgba(0,212,204,0.3); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 12px; padding: 16px; text-align: center; transition: all 0.15s; }
+  .bm-keep-zone.drag-over { border-color: var(--teal); background: rgba(0,212,204,0.1); }
+  .bm-keep-zone-title { font-size: 13px; font-weight: 700; color: var(--teal); margin-bottom: 4px; }
+  .bm-keep-zone-sub { font-size: 10px; color: rgba(255,255,255,0.4); }
+  .bm-sideboard-rail.split-mode .bm-sb-body { flex: 1; overflow-y: auto; }
+
+  .bm-sort-select { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 11px; padding: 6px 10px; border-radius: 7px; }
+  .bm-browse-list { display: flex; flex-direction: column; max-height: 70vh; overflow-y: auto; max-width: 640px; }
+  .bm-browse-row { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); cursor: grab; transition: background 0.1s; }
+  .bm-browse-row:hover { background: rgba(255,255,255,0.03); }
+  .bm-browse-thumb { width: 40px; height: 56px; border-radius: 5px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.12); flex-shrink: 0; cursor: pointer; margin-top: -20px; margin-bottom: -20px; z-index: 1; }
+  .bm-browse-row:hover .bm-browse-thumb { transform: scale(2.4) translateX(20px); z-index: 20; transition: transform 0.12s; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+  .bm-browse-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .bm-browse-info { flex: 1; min-width: 0; }
+  .bm-browse-name { font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bm-browse-meta { display: flex; gap: 8px; font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+  .bm-browse-match { color: var(--teal); font-weight: 600; }
+  .bm-browse-owned { color: var(--teal); }
+  .bm-browse-price { color: var(--orange); }
+  .bm-browse-actions { display: flex; gap: 4px; flex-shrink: 0; }
   .bm-sideboard-rail.collapsed { width: 46px; padding: 14px 8px; overflow: hidden; }
   .bm-sb-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
   .bm-sb-header-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--orange); white-space: nowrap; }
@@ -268,6 +288,8 @@
   .bm-side-btn { background: rgba(245,166,35,0.15); color: var(--orange); }
   .bm-open-pack-btn { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(90deg, var(--teal), #00b8b0); color: #061716; font-weight: 700; padding: 12px 22px; border-radius: 10px; border: none; cursor: pointer; font-size: 13px; }
   .bm-open-pack-btn:hover { transform: translateY(-1px); }
+  .bm-browse-all-btn { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.08); color: #fff; font-weight: 700; padding: 12px 20px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer; font-size: 13px; }
+  .bm-browse-all-btn:hover { background: rgba(255,255,255,0.14); }
   .bm-pile-empty-note { font-size: 12px; color: rgba(255,255,255,0.35); margin-bottom: 20px; }
 
   /* ===== FANNED PACK HAND VIEW ===== */
@@ -776,7 +798,7 @@ function switchTab(tab) {
 // state.cards directly. Nothing touches your actual saved deck until a real Lock In step
 // exists, so you can freely experiment (swap cards, open packs, reroll) without any risk
 // to the live deck. Exiting Build Mode without locking in simply discards the draft.
-let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null, seenInThisPackSession: [], cardTags: {}, comboResults: [] };
+let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null, seenInThisPackSession: [], cardTags: {}, comboResults: [], browsingPile: null, browseResults: [], browseSort: 'score', recommanderFullCache: null, draggingBrowseIndex: null };
 
 // Category keyword sets — used for BOTH primary pile assignment and secondary tag
 // detection, so a card can be filed under one pile but flagged as "also relevant to"
@@ -857,6 +879,20 @@ async function enterBuildMode() {
     bmState.sideboard = [];
   }
   bmState.currentPack = null;
+  bmState.browsingPile = null;
+  bmState.viewingPile = null;
+
+  // Cards added via packs during a previous session only ever existed in memory —
+  // resuming a draft after a reload needs to actually re-fetch their Scryfall data,
+  // or they render as blank cards with no art/text.
+  const allResumedNames = [...bmState.draftCards, ...bmState.sideboard.map(c => c.name)];
+  const missingNames = allResumedNames.filter(n => !cardLookup(n));
+  if (missingNames.length > 0) {
+    document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:rgba(255,255,255,0.5);"><span class="spinner" style="margin-right:10px;"></span> Loading your draft's cards...</div>`;
+    const fetched = await TM.fetchScryfallBulk(missingNames);
+    Object.assign(state.cardData, fetched);
+  }
+
   bmState.piles = bmBuildPiles();
   renderBmMain();
   bmState.gameChangers = await TM.getGameChangersList();
@@ -1192,9 +1228,16 @@ function renderBmSideboardRail() {
   const collapsed = bmState.sideboardCollapsed;
   const firstCard = bmState.sideboard[0]?.name;
   const firstImg = firstCard ? (cardLookup(firstCard)?.image_uris?.normal || '') : '';
+  const inBrowseMode = !!bmState.browsingPile;
 
-  rail.className = 'bm-sideboard-rail' + (collapsed ? ' collapsed' : '');
+  rail.className = 'bm-sideboard-rail' + (collapsed ? ' collapsed' : '') + (inBrowseMode ? ' split-mode' : '');
   rail.innerHTML = `
+    ${inBrowseMode ? `
+    <div class="bm-keep-zone" id="bmKeepZone" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="bmDropOnBrowseKeep(event)">
+      <div class="bm-keep-zone-title"><i class="ti ti-circle-check" aria-hidden="true"></i> Keep</div>
+      <div class="bm-keep-zone-sub">Drop cards here to add them straight to the deck</div>
+    </div>
+    ` : ''}
     <div class="bm-sb-header" onclick="bmToggleSideboardCollapse()">
       <div class="bm-sb-header-title"><i class="ti ti-layers-subtract" aria-hidden="true"></i> <span>Sideboard</span> <span class="bm-sb-count">${bmState.sideboard.length}</span></div>
       <button class="bm-sb-collapse-btn"><i class="ti ${collapsed ? 'ti-chevron-left' : 'ti-chevron-right'}" aria-hidden="true"></i></button>
@@ -1229,6 +1272,7 @@ function bmReturnAllFromSideboard() {
 
 function renderBmMain() {
   if (bmState.currentPack) { renderBmPack(); return; }
+  if (bmState.browsingPile) { renderBmBrowse(); return; }
   if (bmState.viewingPile) { renderBmPileDetail(); return; }
   const piles = bmState.piles;
   const orderedKeys = ['ramp','draw','removal','wipes','synergy','wincons','flex','lands'];
@@ -1270,6 +1314,102 @@ function renderBmMain() {
 }
 
 /* ===== PILE DETAIL VIEW (shows what's already in a pile before opening a pack) ===== */
+/* ===== BROWSE ALL (EDHREC-style dense scroll, real data, no AI generation) ===== */
+async function bmGetFullRecommanderList() {
+  if (bmState.recommanderFullCache) return bmState.recommanderFullCache;
+  try {
+    const res = await fetch('/api/recommander', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ card_format: 'name', commander: bmState.draftCards[0].split(' // ')[0], partner: null, deck: bmState.draftCards.slice(1) }),
+    });
+    if (!res.ok) { bmState.recommanderFullCache = []; return []; }
+    const d = await res.json();
+    bmState.recommanderFullCache = d.data?.recommendations || [];
+  } catch (e) {
+    console.warn('Recommander unavailable for Browse All', e);
+    bmState.recommanderFullCache = [];
+  }
+  return bmState.recommanderFullCache;
+}
+
+async function bmBrowseAll(pileKey) {
+  bmState.browsingPile = pileKey;
+  bmState.viewingPile = null;
+  bmState.browseSort = 'score';
+  document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:rgba(255,255,255,0.5);"><span class="spinner" style="margin-right:10px;"></span> Pulling real community data for this commander...</div>`;
+  try {
+    const recs = await bmGetFullRecommanderList();
+    const deckCardsLower = new Set(bmState.draftCards.map(c => c.split(' // ')[0].toLowerCase().trim()));
+    const candidates = recs.filter(r => !deckCardsLower.has(r.name.split(' // ')[0].toLowerCase().trim()));
+
+    if (candidates.length === 0) {
+      bmState.browseResults = [];
+      renderBmBrowse();
+      return;
+    }
+
+    const names = candidates.map(c => c.name);
+    const verifiedData = await TM.fetchScryfallBulk(names);
+    Object.assign(state.cardData, verifiedData);
+
+    // Filter to cards actually relevant to this pile's role, reusing the same keyword
+    // rules used to classify cards already in the deck — so "Browse all for Ramp" only
+    // shows things that could plausibly land in the Ramp pile.
+    const scored = candidates
+      .filter(c => verifiedData[c.name.toLowerCase()] || verifiedData[c.name.split(' // ')[0].toLowerCase().trim()])
+      .map(c => {
+        const d = verifiedData[c.name.toLowerCase()] || verifiedData[c.name.split(' // ')[0].toLowerCase().trim()];
+        return { name: d.name, score: c.score, cmc: d.cmc || 0, price: parseFloat(d.prices?.usd || 0) };
+      });
+
+    let filtered;
+    if (pileKey === 'lands') {
+      filtered = scored.filter(c => TM.isLand(c.name, state.cardData));
+    } else if (BM_CATEGORY_KEYWORDS[pileKey]) {
+      const keywords = BM_CATEGORY_KEYWORDS[pileKey];
+      filtered = scored.filter(c => {
+        const d = cardLookup(c.name);
+        const text = (d?.oracle_text || '').toLowerCase();
+        return keywords.some(k => text.includes(k)) && !TM.isLand(c.name, state.cardData);
+      });
+    } else {
+      // synergy / wincons / flex — broad buckets, exclude the more specific categories
+      // above so the same card doesn't flood every "Browse all" list.
+      const allSpecificKeywords = Object.values(BM_CATEGORY_KEYWORDS).flat();
+      filtered = scored.filter(c => {
+        const d = cardLookup(c.name);
+        const text = (d?.oracle_text || '').toLowerCase();
+        return !TM.isLand(c.name, state.cardData) && !allSpecificKeywords.some(k => text.includes(k));
+      });
+    }
+
+    const ownedFiltered = bmState.ownedFilteredCache || [];
+    const ownedLower = new Set(ownedFiltered.map(n => n.toLowerCase()));
+    bmState.browseResults = filtered.map(c => ({ ...c, owned: state.collection.has(c.name.toLowerCase()) || ownedLower.has(c.name.toLowerCase()) }));
+    bmSortBrowseResults();
+    renderBmBrowse();
+  } catch (e) {
+    document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:var(--pink);text-align:center;padding:0 40px;">Couldn't load Browse All: ${e.message}</div>`;
+  }
+}
+
+function bmSortBrowseResults() {
+  const sort = bmState.browseSort;
+  bmState.browseResults.sort((a, b) => {
+    if (sort === 'price-desc') return b.price - a.price;
+    if (sort === 'price-asc') return a.price - b.price;
+    if (sort === 'cmc-asc') return a.cmc - b.cmc;
+    return (b.score || 0) - (a.score || 0); // default: real community relevance score
+  });
+}
+
+function bmSetBrowseSort(sort) {
+  bmState.browseSort = sort;
+  bmSortBrowseResults();
+  renderBmBrowse();
+}
+
+
 function bmViewPile(key) {
   if (key === 'lands' && bmState.draftCards.length < 90) {
     alert("Lands unlock once your deck is closer to 100 cards — they're always the last step.");
@@ -1278,6 +1418,78 @@ function bmViewPile(key) {
   bmState.viewingPile = key;
   renderBmMain();
 }
+
+function renderBmBrowse() {
+  const pileKey = bmState.browsingPile;
+  const pile = bmState.piles[pileKey];
+  const sortLabels = { score: 'Relevance', 'price-desc': 'Price: high to low', 'price-asc': 'Price: low to high', 'cmc-asc': 'Mana value' };
+  const rowsHtml = bmState.browseResults.map((c, i) => {
+    const d = cardLookup(c.name);
+    const img = d?.image_uris?.normal || '';
+    const matchPct = Math.round((c.score || 0) * 100);
+    return `<div class="bm-browse-row" draggable="true" ondragstart="bmBrowseDragStart(event, ${i})">
+      <div class="bm-browse-thumb" onclick="openCardModal('${c.name.replace(/'/g,"\\'")}')">
+        ${img ? `<img src="${img}" alt="${c.name}">` : ''}
+      </div>
+      <div class="bm-browse-info">
+        <div class="bm-browse-name">${c.name}</div>
+        <div class="bm-browse-meta">
+          ${c.score ? `<span class="bm-browse-match">${matchPct}% match</span>` : ''}
+          ${c.owned ? `<span class="bm-browse-owned">✓ Owned</span>` : (c.price > 0 ? `<span class="bm-browse-price">$${c.price.toFixed(2)}</span>` : '')}
+          <span class="bm-browse-cmc">CMC ${c.cmc}</span>
+        </div>
+      </div>
+      <div class="bm-browse-actions">
+        <button class="bm-pack-action keep" onclick="bmBrowseDecide(${i}, 'keep')">Keep</button>
+        <button class="bm-pack-action side" onclick="bmBrowseDecide(${i}, 'sideboard')">Side</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('bmMain').innerHTML = `
+    <div class="bm-back-row">
+      <button class="bm-back-btn" onclick="bmState.browsingPile=null;renderBmSideboardRail();renderBmMain();"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
+      <div style="flex:1;">
+        <div class="bm-commander-name">Browse all — <span style="color:var(--pink);">${pile.label}</span></div>
+        <div class="bm-commander-sub">${bmState.browseResults.length} real candidates from community data — drag to Keep or the Sideboard, or use the buttons</div>
+      </div>
+      <select class="bm-sort-select" onchange="bmSetBrowseSort(this.value)">
+        ${Object.entries(sortLabels).map(([v, l]) => `<option value="${v}" ${bmState.browseSort === v ? 'selected' : ''}>Sort: ${l}</option>`).join('')}
+      </select>
+    </div>
+    <div class="bm-browse-list">${rowsHtml || '<div class="bm-pile-empty-note">No matching cards found in the community data for this role.</div>'}</div>
+  `;
+  renderBmSideboardRail();
+}
+
+function bmBrowseDragStart(e, i) {
+  bmState.draggingBrowseIndex = i;
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function bmBrowseDecide(i, action) {
+  const c = bmState.browseResults[i];
+  if (action === 'keep') {
+    bmState.draftCards.push(c.name);
+    bmState.piles = bmBuildPiles();
+    bmShowToast(`Added ${c.name}`);
+  } else if (action === 'sideboard') {
+    bmState.sideboard.push({ name: c.name, from: bmState.browsingPile });
+  }
+  bmState.browseResults.splice(i, 1);
+  renderBmBrowse();
+  renderBmHud();
+  bmAutoSave();
+}
+
+function bmDropOnBrowseKeep(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (bmState.draggingBrowseIndex === null || bmState.draggingBrowseIndex === undefined) return;
+  bmBrowseDecide(bmState.draggingBrowseIndex, 'keep');
+  bmState.draggingBrowseIndex = null;
+}
+
 
 function renderBmPileDetail() {
   const key = bmState.viewingPile;
@@ -1310,7 +1522,10 @@ function renderBmPileDetail() {
     ${pile.cards.length > 0
       ? `<div class="bm-pile-detail-grid">${cardsHtml}</div>`
       : `<div class="bm-pile-empty-note">Nothing here yet — open a pack to start filling this pile.</div>`}
-    <button class="bm-open-pack-btn" onclick="bmOpenPack('${key}')"><i class="ti ti-cards" aria-hidden="true"></i> Open a pack for ${pile.label}</button>
+    <div style="display:flex;gap:10px;">
+      <button class="bm-open-pack-btn" onclick="bmOpenPack('${key}')"><i class="ti ti-cards" aria-hidden="true"></i> Open a pack for ${pile.label}</button>
+      <button class="bm-browse-all-btn" onclick="bmBrowseAll('${key}')"><i class="ti ti-list" aria-hidden="true"></i> Browse all</button>
+    </div>
   `;
 }
 
@@ -1559,9 +1774,13 @@ function bmDropOnDiscardZone(e) {
 function bmDropOnSideboardFromPack(e) {
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
-  if (bmState.draggingPackIndex === null || bmState.draggingPackIndex === undefined) return;
-  bmDecide(bmState.draggingPackIndex, 'sideboard');
-  bmState.draggingPackIndex = null;
+  if (bmState.draggingPackIndex !== null && bmState.draggingPackIndex !== undefined) {
+    bmDecide(bmState.draggingPackIndex, 'sideboard');
+    bmState.draggingPackIndex = null;
+  } else if (bmState.draggingBrowseIndex !== null && bmState.draggingBrowseIndex !== undefined) {
+    bmBrowseDecide(bmState.draggingBrowseIndex, 'sideboard');
+    bmState.draggingBrowseIndex = null;
+  }
 }
 
 async function bmRerollPack() {
