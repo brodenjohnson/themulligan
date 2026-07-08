@@ -801,7 +801,7 @@ function switchTab(tab) {
 // state.cards directly. Nothing touches your actual saved deck until a real Lock In step
 // exists, so you can freely experiment (swap cards, open packs, reroll) without any risk
 // to the live deck. Exiting Build Mode without locking in simply discards the draft.
-let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null, seenInThisPackSession: [], cardTags: {}, comboResults: [], browsingPile: null, browseResults: [], browseSort: 'score', recommanderFullCache: null, draggingBrowseIndex: null, browseOwnedOnly: false };
+let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null, seenInThisPackSession: [], cardTags: {}, comboResults: [], browsingPile: null, browseResults: [], browseSort: 'score', recommanderFullCache: null, draggingBrowseIndex: null, browseOwnedOnly: false, draftCompletedCombos: [] };
 
 // Category keyword sets — used for BOTH primary pile assignment and secondary tag
 // detection, so a card can be filed under one pile but flagged as "also relevant to"
@@ -1106,6 +1106,10 @@ async function bmAddComboPieces(i) {
     const fetched = await TM.fetchScryfallBulk(missingData);
     Object.assign(state.cardData, fetched);
   }
+  // The HUD's Combos accordion otherwise only knows about combos detected against the
+  // saved deck, before Build Mode started — it has no way to know this combo just
+  // became complete. We know it did, since we just added exactly what was missing.
+  bmState.draftCompletedCombos.push({ cards: r.cards, result: r.result });
   bmState.comboResults.splice(i, 1);
   bmState.piles = bmBuildPiles();
   renderBmCombosBrowser();
@@ -1125,7 +1129,7 @@ function bmCardChip(name) {
 }
 
 function renderBmCombosList() {
-  const complete = state.combosSummary?.completeRaw || [];
+  const complete = [...(state.combosSummary?.completeRaw || []), ...bmState.draftCompletedCombos];
   const oneAway = state.combosSummary?.oneAwayRaw || [];
   if (complete.length === 0 && oneAway.length === 0) {
     return `<div class="bm-combo-line">No combos detected yet.</div>`;
