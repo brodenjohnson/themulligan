@@ -227,10 +227,10 @@
   .bm-owned-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(255,255,255,0.7); cursor: pointer; margin-right: 10px; white-space: nowrap; }
   .bm-owned-toggle input { width: auto; margin: 0; }
   .bm-browse-list { display: flex; flex-direction: column; max-height: 70vh; overflow-y: auto; max-width: 640px; }
-  .bm-browse-row { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); cursor: grab; transition: background 0.1s; }
+  .bm-browse-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); cursor: grab; transition: background 0.1s; }
   .bm-browse-row:hover { background: rgba(255,255,255,0.03); }
-  .bm-browse-thumb { width: 40px; height: 56px; border-radius: 5px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.12); flex-shrink: 0; cursor: pointer; margin-top: -20px; margin-bottom: -20px; z-index: 1; }
-  .bm-browse-row:hover .bm-browse-thumb { transform: scale(2.4) translateX(20px); z-index: 20; transition: transform 0.12s; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+  .bm-browse-thumb { width: 70px; height: 98px; border-radius: 6px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.12); flex-shrink: 0; cursor: pointer; margin-top: -21px; margin-bottom: -21px; z-index: 1; }
+  .bm-browse-row:hover .bm-browse-thumb { transform: scale(2.1) translateX(35px); z-index: 20; transition: transform 0.12s; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
   .bm-browse-thumb img { width: 100%; height: 100%; object-fit: cover; }
   .bm-browse-info { flex: 1; min-width: 0; }
   .bm-browse-name { font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -808,10 +808,10 @@ let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), dr
 // others. Overlap is intentional (see DEVELOPMENT_PRINCIPLES.md) — real deckbuilding
 // guides and Archidekt's own category system both treat this as a feature, not a bug.
 const BM_CATEGORY_KEYWORDS = {
-  ramp: ['sol ring','arcane signet','chromatic lantern','mind stone','talisman','signet','cultivate','kodama','rampant','farseek','commander\'s sphere','add {c}','add one mana','search your library for a land'],
-  draw: ['draw a card','draw two cards','draw three cards','loot','wheel','windfall','ponder','preordain','brainstorm'],
-  wipes: ['destroy all','each creature','all creatures','every creature','destroy each','exile all','deals damage to each','sacrifices all'],
-  removal: ['destroy target','exile target','counter target','damage to any target','damage to target','-x/-x','return target'],
+  ramp: ['sol ring','arcane signet','chromatic lantern','mind stone','talisman','signet','cultivate','kodama','rampant','farseek','commander\'s sphere','add {','add one mana','add mana of any','search your library for a land','search your library for a basic land','put a land card','you may put a land','additional land','extra land','create a treasure','treasure token'],
+  draw: ['draw a card','draw two cards','draw three cards','draw cards equal','draw a card for each','whenever you draw','you may draw a card','loot','wheel','windfall','ponder','preordain','brainstorm','investigate'],
+  wipes: ['destroy all','each creature','all creatures','every creature','destroy each','exile all','deals damage to each','sacrifices all','each other creature','all other creatures'],
+  removal: ['destroy target','exile target','counter target','damage to any target','damage to target','-x/-x','return target','exiles target','loses all abilities'],
 };
 
 function bmClassifyCard(name) {
