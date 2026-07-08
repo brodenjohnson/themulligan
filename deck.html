@@ -223,6 +223,8 @@
   .bm-sideboard-rail.split-mode .bm-sb-body { flex: 1; overflow-y: auto; }
 
   .bm-sort-select { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 11px; padding: 6px 10px; border-radius: 7px; }
+  .bm-owned-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(255,255,255,0.7); cursor: pointer; margin-right: 10px; white-space: nowrap; }
+  .bm-owned-toggle input { width: auto; margin: 0; }
   .bm-browse-list { display: flex; flex-direction: column; max-height: 70vh; overflow-y: auto; max-width: 640px; }
   .bm-browse-row { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); cursor: grab; transition: background 0.1s; }
   .bm-browse-row:hover { background: rgba(255,255,255,0.03); }
@@ -798,7 +800,7 @@ function switchTab(tab) {
 // state.cards directly. Nothing touches your actual saved deck until a real Lock In step
 // exists, so you can freely experiment (swap cards, open packs, reroll) without any risk
 // to the live deck. Exiting Build Mode without locking in simply discards the draft.
-let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null, seenInThisPackSession: [], cardTags: {}, comboResults: [], browsingPile: null, browseResults: [], browseSort: 'score', recommanderFullCache: null, draggingBrowseIndex: null };
+let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null, seenInThisPackSession: [], cardTags: {}, comboResults: [], browsingPile: null, browseResults: [], browseSort: 'score', recommanderFullCache: null, draggingBrowseIndex: null, browseOwnedOnly: false };
 
 // Category keyword sets — used for BOTH primary pile assignment and secondary tag
 // detection, so a card can be filed under one pile but flagged as "also relevant to"
@@ -1086,7 +1088,7 @@ function renderBmCombosBrowser() {
   `;
 }
 
-function bmAddComboPieces(i) {
+async function bmAddComboPieces(i) {
   const r = bmState.comboResults[i];
   const added = [];
   r.missing.forEach(name => {
@@ -1095,6 +1097,14 @@ function bmAddComboPieces(i) {
       added.push(name);
     }
   });
+  // Combo pieces come from Commander Spellbook's data, not from a pack or browse list —
+  // their Scryfall data (art, oracle text) was never fetched, so without this they'd
+  // render as blank cards the moment they land in a pile.
+  const missingData = added.filter(name => !cardLookup(name));
+  if (missingData.length > 0) {
+    const fetched = await TM.fetchScryfallBulk(missingData);
+    Object.assign(state.cardData, fetched);
+  }
   bmState.comboResults.splice(i, 1);
   bmState.piles = bmBuildPiles();
   renderBmCombosBrowser();
@@ -1336,6 +1346,7 @@ async function bmBrowseAll(pileKey) {
   bmState.browsingPile = pileKey;
   bmState.viewingPile = null;
   bmState.browseSort = 'score';
+  bmState.browseOwnedOnly = false;
   document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:rgba(255,255,255,0.5);"><span class="spinner" style="margin-right:10px;"></span> Pulling real community data for this commander...</div>`;
   try {
     const recs = await bmGetFullRecommanderList();
@@ -1409,6 +1420,11 @@ function bmSetBrowseSort(sort) {
   renderBmBrowse();
 }
 
+function bmToggleBrowseOwnedOnly(checked) {
+  bmState.browseOwnedOnly = checked;
+  renderBmBrowse();
+}
+
 
 function bmViewPile(key) {
   if (key === 'lands' && bmState.draftCards.length < 90) {
@@ -1423,7 +1439,12 @@ function renderBmBrowse() {
   const pileKey = bmState.browsingPile;
   const pile = bmState.piles[pileKey];
   const sortLabels = { score: 'Relevance', 'price-desc': 'Price: high to low', 'price-asc': 'Price: low to high', 'cmc-asc': 'Mana value' };
-  const rowsHtml = bmState.browseResults.map((c, i) => {
+  const withIndex = bmState.browseResults.map((c, origIndex) => ({ ...c, origIndex }));
+  const displayList = bmState.browseOwnedOnly ? withIndex.filter(c => c.owned) : withIndex;
+  const ownedCount = withIndex.filter(c => c.owned).length;
+
+  const rowsHtml = displayList.map(c => {
+    const i = c.origIndex;
     const d = cardLookup(c.name);
     const img = d?.image_uris?.normal || '';
     const matchPct = Math.round((c.score || 0) * 100);
@@ -1451,8 +1472,12 @@ function renderBmBrowse() {
       <button class="bm-back-btn" onclick="bmState.browsingPile=null;renderBmSideboardRail();renderBmMain();"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
       <div style="flex:1;">
         <div class="bm-commander-name">Browse all — <span style="color:var(--pink);">${pile.label}</span></div>
-        <div class="bm-commander-sub">${bmState.browseResults.length} real candidates from community data — drag to Keep or the Sideboard, or use the buttons</div>
+        <div class="bm-commander-sub">${displayList.length} real candidates from community data — drag to Keep or the Sideboard, or use the buttons</div>
       </div>
+      <label class="bm-owned-toggle">
+        <input type="checkbox" ${bmState.browseOwnedOnly ? 'checked' : ''} onchange="bmToggleBrowseOwnedOnly(this.checked)">
+        Owned only (${ownedCount})
+      </label>
       <select class="bm-sort-select" onchange="bmSetBrowseSort(this.value)">
         ${Object.entries(sortLabels).map(([v, l]) => `<option value="${v}" ${bmState.browseSort === v ? 'selected' : ''}>Sort: ${l}</option>`).join('')}
       </select>
