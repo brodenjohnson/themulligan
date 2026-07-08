@@ -559,7 +559,7 @@ async function scratchSelectCommander(name) {
   try {
     const res = await fetch('https://api.scryfall.com/cards/collection', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifiers: [{ name }] }),
+      body: JSON.stringify({ identifiers: [{ name: name.split(' // ')[0].trim() }] }),
     });
     const data = await res.json();
     const card = data.data?.[0];
