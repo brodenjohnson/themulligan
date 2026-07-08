@@ -247,6 +247,7 @@
   .bm-pile-detail-img { aspect-ratio: 5/7; border-radius: 8px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.12); cursor: pointer; margin-bottom: 6px; }
   .bm-pile-detail-img img { width: 100%; height: 100%; object-fit: cover; }
   .bm-pile-detail-actions { display: flex; gap: 4px; }
+  .bm-secondary-tags { font-size: 9px; color: var(--teal); margin-bottom: 4px; line-height: 1.3; }
   .bm-pile-detail-actions button { flex: 1; padding: 5px 0; border-radius: 5px; font-size: 9px; font-weight: 700; border: none; cursor: pointer; }
   .bm-remove-btn { background: rgba(255,59,107,0.15); color: var(--pink); }
   .bm-side-btn { background: rgba(245,166,35,0.15); color: var(--orange); }
@@ -262,6 +263,7 @@
   .bm-hand-card-img { width: 244px; height: 340px; border-radius: 10px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 8px 20px rgba(0,0,0,0.4); position: relative; cursor: pointer; }
   .bm-hand-card-img img { width: 100%; height: 100%; object-fit: cover; }
   .bm-hand-card-price { position: absolute; bottom: 4px; left: 4px; background: rgba(0,0,0,0.6); color: var(--orange); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 6px; }
+  .bm-hand-card-fit { position: absolute; bottom: 4px; right: 4px; background: rgba(0,0,0,0.6); color: rgba(255,255,255,0.6); font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 6px; }
   .bm-hand-card-actions { display: flex; gap: 3px; margin-top: 6px; opacity: 0; transition: opacity 0.15s; }
   .bm-hand-card:hover .bm-hand-card-actions { opacity: 1; }
 
@@ -759,36 +761,66 @@ function switchTab(tab) {
 // state.cards directly. Nothing touches your actual saved deck until a real Lock In step
 // exists, so you can freely experiment (swap cards, open packs, reroll) without any risk
 // to the live deck. Exiting Build Mode without locking in simply discards the draft.
-let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null, seenInThisPackSession: [] };
+let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null, ownedFilteredCache: null, draggingPackIndex: null, seenInThisPackSession: [], cardTags: {} };
+
+// Category keyword sets — used for BOTH primary pile assignment and secondary tag
+// detection, so a card can be filed under one pile but flagged as "also relevant to"
+// others. Overlap is intentional (see DEVELOPMENT_PRINCIPLES.md) — real deckbuilding
+// guides and Archidekt's own category system both treat this as a feature, not a bug.
+const BM_CATEGORY_KEYWORDS = {
+  ramp: ['sol ring','arcane signet','chromatic lantern','mind stone','talisman','signet','cultivate','kodama','rampant','farseek','commander\'s sphere','add {c}','add one mana','search your library for a land'],
+  draw: ['draw a card','draw two cards','draw three cards','loot','wheel','windfall','ponder','preordain','brainstorm'],
+  wipes: ['destroy all','each creature','all creatures','every creature','destroy each','exile all','deals damage to each','sacrifices all'],
+  removal: ['destroy target','exile target','counter target','damage to any target','damage to target','-x/-x','return target'],
+};
 
 function bmClassifyCard(name) {
   const d = cardLookup(name);
   const text = (d?.oracle_text || name).toLowerCase();
-  if (name === bmState.draftCards[0]) return null;
-  if (TM.isLand(name, state.cardData)) return 'lands';
-  const rampWords = ['sol ring','arcane signet','chromatic lantern','mind stone','talisman','signet','cultivate','kodama','rampant','farseek','commander\'s sphere','add {c}','add one mana','search your library for a land'];
-  if (rampWords.some(k => text.includes(k))) return 'ramp';
-  const drawWords = ['draw a card','draw two cards','draw three cards','loot','wheel','windfall','ponder','preordain','brainstorm'];
-  if (drawWords.some(k => text.includes(k))) return 'draw';
-  const removalWords = ['destroy target','exile target','counter target','damage to any target','damage to target','-x/-x','return target'];
-  if (removalWords.some(k => text.includes(k))) return 'removal';
+  if (name === bmState.draftCards[0]) return { primary: null, secondary: [] };
+  if (TM.isLand(name, state.cardData)) return { primary: 'lands', secondary: [] };
+
   const inCombo = (state.combosSummary?.complete || []).some(c => c.toLowerCase().includes(name.toLowerCase()));
-  if (inCombo) return 'wincons';
-  return 'synergy';
+  const matches = Object.entries(BM_CATEGORY_KEYWORDS)
+    .filter(([, words]) => words.some(k => text.includes(k)))
+    .map(([cat]) => cat);
+  if (inCombo) matches.push('wincons');
+
+  if (matches.length === 0) return { primary: 'synergy', secondary: [] };
+  // Board wipes checked before single-target removal — a card matching both is a wipe first.
+  const priorityOrder = ['wincons', 'wipes', 'ramp', 'draw', 'removal'];
+  const primary = priorityOrder.find(cat => matches.includes(cat)) || matches[0];
+  const secondary = matches.filter(cat => cat !== primary);
+  return { primary, secondary };
+}
+
+function bmCalculateLandTarget() {
+  // 28 + (2 × number of colours) + average mana value — a real, commonly-used formula,
+  // more precise than a flat number since it actually reflects this specific deck.
+  const colors = getCommanderColorIdentity().length || 1;
+  const nonLandCosts = bmState.draftCards
+    .filter(c => c !== bmState.draftCards[0] && !TM.isLand(c, state.cardData))
+    .map(c => cardLookup(c)?.cmc || 0);
+  const avgCmc = nonLandCosts.length > 0 ? nonLandCosts.reduce((a, b) => a + b, 0) / nonLandCosts.length : 3;
+  return Math.round(28 + (2 * colors) + avgCmc);
 }
 
 function bmBuildPiles() {
   const piles = {
     ramp: { label: 'Ramp', cards: [], target: 10 },
     draw: { label: 'Card draw', cards: [], target: 10 },
-    removal: { label: 'Removal', cards: [], target: 8 },
+    removal: { label: 'Removal', cards: [], target: 7 },
+    wipes: { label: 'Board wipes', cards: [], target: 3 },
     synergy: { label: 'Synergy', cards: [], target: 20 },
-    wincons: { label: 'Win conditions', cards: [], target: 3 },
-    lands: { label: 'Lands', cards: [], target: 37 },
+    wincons: { label: 'Win conditions', cards: [], target: 8 },
+    flex: { label: 'Flex', cards: [], target: 4 },
+    lands: { label: 'Lands', cards: [], target: bmCalculateLandTarget() },
   };
+  bmState.cardTags = {}; // name -> array of secondary category labels, for display
   bmState.draftCards.forEach(name => {
-    const cat = bmClassifyCard(name);
-    if (cat && piles[cat]) piles[cat].cards.push(name);
+    const { primary, secondary } = bmClassifyCard(name);
+    if (primary && piles[primary]) piles[primary].cards.push(name);
+    if (secondary.length > 0) bmState.cardTags[name] = secondary;
   });
   return piles;
 }
@@ -1069,7 +1101,7 @@ function renderBmMain() {
   if (bmState.currentPack) { renderBmPack(); return; }
   if (bmState.viewingPile) { renderBmPileDetail(); return; }
   const piles = bmState.piles;
-  const orderedKeys = ['ramp','draw','removal','synergy','wincons','lands'];
+  const orderedKeys = ['ramp','draw','removal','wipes','synergy','wincons','flex','lands'];
   const pileHtml = orderedKeys.map(key => {
     const pile = piles[key];
     const healthy = pile.cards.length >= pile.target;
@@ -1120,13 +1152,16 @@ function bmViewPile(key) {
 function renderBmPileDetail() {
   const key = bmState.viewingPile;
   const pile = bmState.piles[key];
+  const pileLabels = { ramp: 'Ramp', draw: 'Card draw', removal: 'Removal', wipes: 'Board wipes', synergy: 'Synergy', wincons: 'Win conditions', flex: 'Flex' };
   const cardsHtml = pile.cards.map(name => {
     const d = cardLookup(name);
     const img = d?.image_uris?.normal || '';
+    const tags = bmState.cardTags[name] || [];
     return `<div class="bm-pile-detail-card">
       <div class="bm-pile-detail-img" onclick="openCardModal('${name.replace(/'/g,"\\'")}')">
         ${img ? `<img src="${img}" alt="${name}">` : ''}
       </div>
+      ${tags.length > 0 ? `<div class="bm-secondary-tags">Also: ${tags.map(t => pileLabels[t] || t).join(', ')}</div>` : ''}
       <div class="bm-pile-detail-actions">
         <button class="bm-side-btn" onclick="bmPileCardAction('${key}','${name.replace(/'/g,"\\'")}','sideboard')">Side</button>
         <button class="bm-remove-btn" onclick="bmPileCardAction('${key}','${name.replace(/'/g,"\\'")}','discard')">✕</button>
@@ -1224,6 +1259,12 @@ async function bmGeneratePack(pileKey) {
     ? `\nAlready shown in this pack session — do NOT suggest any of these again, the user has already seen and decided on them: ${bmState.seenInThisPackSession.join(', ')}`
     : '';
 
+  const pileInstructionLine = pileKey === 'flex'
+    ? `This deck has ${pile.cards.length} "Flex" slots filled out of a target of ${pile.target}. Flex slots are DELIBERATELY not required to fit the deck's specific plan — suggest genuinely powerful, generically excellent cards in ${guildName} colours that are just good on their own merits (efficient removal, strong card advantage engines, powerful staples), the kind of "goodstuff" that's worth an exception slot even in a focused deck.`
+    : `This deck's "${pile.label}" pile currently has ${pile.cards.length} cards and needs roughly ${Math.max(0, pile.target - pile.cards.length)} more to be healthy.
+Suggest exactly 10 real, verified Magic: The Gathering cards that fill the "${pile.label}" role specifically for this deck, in ${guildName} colours only.
+Give real weight to the community data above where it's relevant to this pile's role — a card lots of real decks with this commander actually run is a stronger signal than pure theory.`;
+
   const prompt = `Commander deck: "${bmState.draftCards[0].split(' // ')[0]}"
 Colour identity: ${guildName}
 Current decklist (${bmState.draftCards.length} cards — never suggest any of these): ${bmState.draftCards.join(', ')}
@@ -1234,17 +1275,16 @@ ${budgetLine}
 ${prefLine}
 ${alreadySeenLine}
 
-This deck's "${pile.label}" pile currently has ${pile.cards.length} cards and needs roughly ${Math.max(0, pile.target - pile.cards.length)} more to be healthy.
-Suggest exactly 10 real, verified Magic: The Gathering cards that fill the "${pile.label}" role specifically for this deck, in ${guildName} colours only.
-Give real weight to the community data above where it's relevant to this pile's role — a card lots of real decks with this commander actually run is a stronger signal than pure theory.
+${pileInstructionLine}
 For the "score" field: 90+ means it appears in the real community data above AND fits this pile; 70-89 means strong theoretical fit but not confirmed by community data; below 70 means a speculative or synergy-dependent pick. Be honest and varied — not everything is a 90.
+For the "gameStateFit" field, use "early" if the card is best played turns 1-4, "late" if it's a late-game payoff or needs a developed board/graveyard, or "flexible" if it's reasonably good whenever it's drawn.
 CRITICAL: Only real printed cards. Never suggest anything already in the current decklist or already shown in this pack session.
 Return JSON only, no markdown. Keep each reason to 8 words or fewer:
-{"cards":[{"name":"Card","reason":"short reason","score":85}]}`;
+{"cards":[{"name":"Card","reason":"short reason","score":85,"gameStateFit":"early"}]}`;
 
   const data = await safeFetchJson('/api/chat', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 800,
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 900,
       system: 'You are an MTG deck-building expert. You never invent or hallucinate card names. Return only valid JSON, no markdown.',
       messages: [{ role: 'user', content: prompt }] }),
   });
@@ -1281,10 +1321,12 @@ function renderBmPack() {
     const d = cardLookup(c.name);
     const img = d?.image_uris?.normal || '';
     const price = parseFloat(d?.prices?.usd || 0);
+    const fitIcon = c.gameStateFit === 'early' ? '⏱ Early' : c.gameStateFit === 'late' ? '⏱ Late' : '';
     return `<div class="bm-hand-card" draggable="true" ondragstart="bmDragStart(event, ${i})">
       <div class="bm-hand-card-img" onclick="openCardModal('${c.name.replace(/'/g,"\\'")}')">
         ${img ? `<img src="${img}" alt="${c.name}">` : c.name}
         <div class="bm-pack-score">${c.score || '?'}</div>
+        ${fitIcon ? `<div class="bm-hand-card-fit">${fitIcon}</div>` : ''}
         ${c.owned ? `<div class="bm-hand-card-price" style="color:var(--teal);">✓ Owned</div>` : (price > 0 ? `<div class="bm-hand-card-price">$${price.toFixed(2)}</div>` : '')}
       </div>
       <div class="bm-hand-card-actions">
@@ -1388,11 +1430,15 @@ function bmDropOnSideboardFromPack(e) {
 async function bmRerollPack() {
   // Kept cards are a real decision you already made — a reroll should only replace the
   // undecided cards still in your hand, never the ones you've already chosen to keep.
+  // Total hand size is capped at 10 (kept + fresh) so it never grows unbounded across
+  // repeated rerolls — an overcrowded fanned hand makes individual cards hard to click
+  // or drag accurately, which can look like "keeping isn't working" when it's really a
+  // misclick on an overlapping neighbour.
   const keptCards = bmState.currentPack.filter((c, i) => bmState.packDecisions[i] === 'keep');
   document.getElementById('bmMain').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:60vh;font-size:13px;color:rgba(255,255,255,0.5);"><span class="spinner" style="margin-right:10px;"></span> Rerolling...</div>`;
   const fresh = await bmGeneratePack(bmState.packCategory);
   const keptNamesLower = new Set(keptCards.map(c => c.name.toLowerCase()));
-  const freshFiltered = fresh.filter(c => !keptNamesLower.has(c.name.toLowerCase()));
+  const freshFiltered = fresh.filter(c => !keptNamesLower.has(c.name.toLowerCase())).slice(0, Math.max(0, 10 - keptCards.length));
   bmState.currentPack = [...keptCards, ...freshFiltered];
   bmState.packDecisions = {};
   keptCards.forEach((c, i) => { bmState.packDecisions[i] = 'keep'; });
@@ -1402,10 +1448,19 @@ async function bmRerollPack() {
 function bmApplyPack() {
   // Sideboard decisions already committed immediately when chosen — only "keep" needs
   // committing here, since kept cards sit in the tray as a staged, reversible choice
-  // until you're ready to move on.
-  let kept = 0;
+  // until you're ready to move on. Deduped defensively against names already in the
+  // draft, in case the same card name ever slipped through as a duplicate.
+  const existingLower = new Set(bmState.draftCards.map(c => c.split(' // ')[0].toLowerCase().trim()));
+  const keptNames = [];
   bmState.currentPack.forEach((c, i) => {
-    if (bmState.packDecisions[i] === 'keep') { bmState.draftCards.push(c.name); kept++; }
+    if (bmState.packDecisions[i] === 'keep') {
+      const key = c.name.split(' // ')[0].toLowerCase().trim();
+      if (!existingLower.has(key)) {
+        bmState.draftCards.push(c.name);
+        existingLower.add(key);
+        keptNames.push(c.name);
+      }
+    }
   });
   bmState.currentPack = null;
   bmState.packCategory = null;
@@ -1413,6 +1468,26 @@ function bmApplyPack() {
   renderBmMain();
   renderBmHud();
   bmAutoSave();
+  if (keptNames.length > 0) {
+    const pileLabels = { ramp: 'Ramp', draw: 'Card draw', removal: 'Removal', wipes: 'Board wipes', synergy: 'Synergy', wincons: 'Win conditions', flex: 'Flex' };
+    const versatile = keptNames.filter(n => (bmState.cardTags[n] || []).length > 0);
+    let msg = `Added ${keptNames.length} card${keptNames.length !== 1 ? 's' : ''}: ${keptNames.join(', ')}`;
+    if (versatile.length > 0) {
+      msg += `\n✨ ${versatile.map(n => `${n} also helps: ${bmState.cardTags[n].map(t => pileLabels[t] || t).join(', ')}`).join(' · ')}`;
+    }
+    bmShowToast(msg);
+  }
+}
+
+function bmShowToast(message) {
+  const existing = document.getElementById('bmToast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.id = 'bmToast';
+  toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0d0d10;border:1px solid rgba(0,212,204,0.4);color:#fff;padding:10px 18px;border-radius:10px;font-size:12px;z-index:600;box-shadow:0 0 30px rgba(0,212,204,0.25);max-width:80vw;text-align:center;white-space:pre-line;line-height:1.6;';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4500);
 }
 
 /* ===== LOCK IN ===== */
