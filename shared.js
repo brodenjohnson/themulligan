@@ -292,6 +292,48 @@ async function fetchExactPrintings(hints) {
   return results;
 }
 
+// Fetches every real printing of a card (for an art-selection picker), newest first.
+// Per-card art overrides — a manually chosen printing persists across sessions on this
+// device. A lightweight localStorage store rather than a schema change, since this is a
+// display preference, not core deck data.
+const ART_OVERRIDE_KEY = 'mulligan_art_overrides_v1';
+
+function getArtOverride(cardName) {
+  try {
+    const all = JSON.parse(localStorage.getItem(ART_OVERRIDE_KEY) || '{}');
+    return all[cardName.split(' // ')[0].toLowerCase().trim()] || null;
+  } catch { return null; }
+}
+
+function setArtOverride(cardName, printing) {
+  try {
+    const all = JSON.parse(localStorage.getItem(ART_OVERRIDE_KEY) || '{}');
+    all[cardName.split(' // ')[0].toLowerCase().trim()] = printing;
+    localStorage.setItem(ART_OVERRIDE_KEY, JSON.stringify(all));
+  } catch (e) { console.warn('Could not save art override', e); }
+}
+
+async function fetchAllPrintings(cardName) {
+  const frontName = cardName.split(' // ')[0].trim();
+  try {
+    const res = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent('!"' + frontName + '"')}&unique=prints&order=released&dir=desc`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.data || []).map(card => ({
+      name: card.name,
+      set_name: card.set_name,
+      set: card.set,
+      collector_number: card.collector_number,
+      released_at: card.released_at,
+      image_uris: card.image_uris || card.card_faces?.[0]?.image_uris || null,
+      prices: card.prices || {},
+    })).filter(p => p.image_uris);
+  } catch (e) {
+    console.warn('Could not fetch printings', e);
+    return [];
+  }
+}
+
 // Reconciles a deck's card list against the collection: cards newly added to the deck get
 // pulled from Bulk (if available) and tagged with this deck's name; cards removed from the
 // deck get moved back to Bulk. This is what makes the collection's "In decks" / "Decks
@@ -731,6 +773,7 @@ window.TM = {
   validateDeckList, validateCollection,
   parseCSVLine, collectionToLookup,
   getColorIdentities, filterByColorIdentity, getCardPrices,
-  extractPrintingHints, fetchExactPrintings,
+  extractPrintingHints, fetchExactPrintings, fetchAllPrintings,
+  getArtOverride, setArtOverride,
   reconcileDeckCollection, getGameChangersList,
 };
