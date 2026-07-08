@@ -180,7 +180,7 @@
   .art-picker-option:hover, .art-picker-option.selected { border-color: var(--teal); }
   .art-picker-option img { width: 100%; aspect-ratio: 5/7; object-fit: cover; display: block; }
   .art-picker-option-label { font-size: 10px; color: var(--ink3); text-align: center; padding: 4px 2px; }
-  .bm-pile-row { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 14px; }
+  .bm-pile-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
   .bm-pile { flex-shrink: 0; width: 165px; }
   .bm-pile-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 0 2px; }
   .bm-pile-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: rgba(255,255,255,0.5); }
@@ -272,7 +272,7 @@
 
   /* ===== FANNED PACK HAND VIEW ===== */
   .bm-hand-row { display: flex; justify-content: center; padding: 30px 0 50px; min-height: 260px; }
-  .bm-hand-card { width: 244px; flex-shrink: 0; margin-left: -95px; transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), margin 0.25s, z-index 0s; transform-origin: bottom center; cursor: pointer; position: relative; }
+  .bm-hand-card { width: 244px; flex-shrink: 0; margin-left: -155px; transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), margin 0.25s, z-index 0s; transform-origin: bottom center; cursor: pointer; position: relative; transform: rotate(var(--fan-rot, 0deg)) translateY(var(--fan-lift, 0px)); }
   .bm-hand-card:first-child { margin-left: 0; }
   .bm-hand-card:hover { transform: translateY(-50px) rotate(0deg) scale(1.22); z-index: 50; }
   .bm-hand-card-img { width: 244px; height: 340px; border-radius: 10px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 8px 20px rgba(0,0,0,0.4); position: relative; cursor: pointer; }
@@ -1103,7 +1103,7 @@ function renderBmHud() {
   const typeCounts = bmCardTypeCounts();
   const totalPrice = bmState.draftCards.reduce((sum, c) => sum + parseFloat(cardLookup(c)?.prices?.usd || 0), 0);
   const ownedPrice = bmState.draftCards.reduce((sum, c) => sum + (isOwnedCard(c) ? parseFloat(cardLookup(c)?.prices?.usd || 0) : 0), 0);
-  const ramp = bmState.piles.ramp, removal = bmState.piles.removal;
+  const ramp = bmState.piles.ramp, removal = bmState.piles.removal, wipes = bmState.piles.wipes, wincons = bmState.piles.wincons;
 
   const combosHtml = (state.combosSummary?.complete?.length || state.combosSummary?.oneAway?.length)
     ? `${(state.combosSummary.complete || []).slice(0,3).map(c => `<div class="bm-combo-line"><span class="bm-combo-status-complete">Complete</span> — ${c}</div>`).join('')}
@@ -1132,6 +1132,8 @@ function renderBmHud() {
       <div class="bm-stat"><span class="bm-stat-label">Game Changers used</span><span class="bm-stat-value ${gcClass}">${gcCount} / ${gcLimit === Infinity ? '∞' : gcLimit}</span></div>
       <div class="bm-stat"><span class="bm-stat-label">Ramp</span><span class="bm-stat-value ${ramp.cards.length < ramp.target ? 'danger' : 'ok'}">${ramp.cards.length} / ${ramp.target}</span></div>
       <div class="bm-stat"><span class="bm-stat-label">Removal</span><span class="bm-stat-value ${removal.cards.length < removal.target ? 'warn' : 'ok'}">${removal.cards.length} / ${removal.target}</span></div>
+      <div class="bm-stat"><span class="bm-stat-label">Board wipes</span><span class="bm-stat-value ${wipes.cards.length < wipes.target ? 'warn' : 'ok'}">${wipes.cards.length} / ${wipes.target}</span></div>
+      <div class="bm-stat"><span class="bm-stat-label">Win conditions</span><span class="bm-stat-value ${wincons.cards.length < wincons.target ? 'danger' : 'ok'}">${wincons.cards.length} / ${wincons.target}</span></div>
     </div>
     <div class="bm-accordion ${bmState.combosOpen ? 'open' : ''}">
       <div class="bm-accordion-header" onclick="bmToggleAccordion('combos')"><span><i class="ti ti-affiliate" aria-hidden="true"></i> Combos</span><span class="bm-accordion-chevron">⌄</span></div>
@@ -1444,13 +1446,20 @@ function renderBmPack() {
     else if (!d) handIndices.push(i); // sideboard/discard are committed immediately and leave the pack view entirely
   });
 
-  function handCardMarkup(i) {
+  function handCardMarkup(i, posInHand, totalInHand) {
     const c = bmState.currentPack[i];
     const d = cardLookup(c.name);
     const img = d?.image_uris?.normal || '';
     const price = parseFloat(d?.prices?.usd || 0);
     const fitIcon = c.gameStateFit === 'early' ? '⏱ Early' : c.gameStateFit === 'late' ? '⏱ Late' : '';
-    return `<div class="bm-hand-card" draggable="true" ondragstart="bmDragStart(event, ${i})">
+    // Fan the hand into a gentle semi-circle instead of a flat overlapping row — outer
+    // cards rotate outward and lift slightly, like cards held in a hand.
+    const mid = (totalInHand - 1) / 2;
+    const offsetFromCenter = posInHand - mid;
+    const anglePerCard = totalInHand > 1 ? Math.min(6, 42 / totalInHand) : 0;
+    const rotation = (offsetFromCenter * anglePerCard).toFixed(1);
+    const lift = Math.abs(offsetFromCenter) * 5;
+    return `<div class="bm-hand-card" draggable="true" ondragstart="bmDragStart(event, ${i})" style="--fan-rot:${rotation}deg;--fan-lift:${lift}px;">
       <div class="bm-hand-card-img" onclick="openCardModal('${c.name.replace(/'/g,"\\'")}')">
         ${img ? `<img src="${img}" alt="${c.name}">` : c.name}
         <div class="bm-pack-score">${c.score || '?'}</div>
@@ -1485,7 +1494,7 @@ function renderBmPack() {
         <div class="bm-commander-sub">Hover to lift a card, or drag it to Keep, the Sideboard, or the graveyard</div>
       </div>
     </div>
-    <div class="bm-hand-row">${handIndices.map(handCardMarkup).join('') || '<div style="color:rgba(255,255,255,0.3);font-size:12px;padding:40px 0;">All cards decided — hit Continue below.</div>'}</div>
+    <div class="bm-hand-row">${handIndices.map((i, pos) => handCardMarkup(i, pos, handIndices.length)).join('') || '<div style="color:rgba(255,255,255,0.3);font-size:12px;padding:40px 0;">All cards decided — hit Continue below.</div>'}</div>
 
     <div class="bm-zones-row">
       <div class="bm-kept-tray" id="bmKeptTray" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="bmDropOnKeep(event)">
