@@ -214,9 +214,53 @@
   .bm-flat-btn { border: none; padding: 10px 18px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; }
   .bm-flat-btn.reroll { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
   .bm-flat-btn.continue { background: linear-gradient(90deg, var(--teal), #00b8b0); color: #061716; }
-  .bm-sb-mini { width: 28px; height: 38px; border-radius: 5px; background: #241c0f; border: 1px solid rgba(245,166,35,0.3); margin-left: -16px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 6px; color: rgba(255,255,255,0.4); text-align: center; padding: 2px; }
-  .bm-sb-mini:first-child { margin-left: 0; }
-  .bm-sb-mini:hover { transform: translateY(-6px); z-index: 5; }
+  /* ===== SIDEBOARD RIGHT RAIL ===== */
+  .bm-sideboard-rail { width: 210px; flex-shrink: 0; background: rgba(255,255,255,0.03); border-left: 1px solid rgba(245,166,35,0.2); padding: 14px 12px; display: flex; flex-direction: column; gap: 10px; z-index: 5; overflow-y: auto; transition: width 0.2s, padding 0.2s; }
+  .bm-sideboard-rail.collapsed { width: 46px; padding: 14px 8px; overflow: hidden; }
+  .bm-sb-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  .bm-sb-header-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--orange); white-space: nowrap; }
+  .bm-sb-count { background: var(--orange); color: #2b1a03; font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 10px; }
+  .bm-sb-collapse-btn { background: none; border: none; color: var(--orange); cursor: pointer; font-size: 14px; }
+  .bm-sideboard-rail.collapsed .bm-sb-body, .bm-sideboard-rail.collapsed .bm-sb-header-title span { display: none; }
+  .bm-sb-preview { height: 160px; border-radius: 10px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(245,166,35,0.3); display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.3); font-size: 11px; text-align: center; padding: 10px; margin-bottom: 4px; }
+  .bm-sb-preview img { width: 100%; height: 100%; object-fit: cover; }
+  .bm-sb-stack { display: flex; flex-direction: column; gap: -30px; }
+  .bm-sb-card { width: 100%; aspect-ratio: 5/7; border-radius: 8px; background: #241c0f; border: 1.5px solid rgba(245,166,35,0.35); cursor: pointer; overflow: hidden; margin-top: -46px; transition: transform 0.15s, margin 0.15s, z-index 0s; position: relative; }
+  .bm-sb-card:first-child { margin-top: 0; }
+  .bm-sb-card img { width: 100%; height: 100%; object-fit: cover; }
+  .bm-sb-card:hover { transform: translateY(-10px) scale(1.04); z-index: 20; box-shadow: 0 10px 24px rgba(0,0,0,0.5); }
+  .bm-sb-card-discard { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,0.65); color: var(--pink); display: flex; align-items: center; justify-content: center; font-size: 11px; opacity: 0; transition: opacity 0.15s; }
+  .bm-sb-card:hover .bm-sb-card-discard { opacity: 1; }
+  .bm-sb-empty { font-size: 11px; color: rgba(255,255,255,0.3); text-align: center; padding: 14px 0; }
+
+  /* ===== BACK BUTTON (shared across pack/pile-detail views) ===== */
+  .bm-back-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .bm-back-btn { background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.7); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 15px; flex-shrink: 0; }
+  .bm-back-btn:hover { background: rgba(255,255,255,0.15); }
+
+  /* ===== PILE DETAIL VIEW (contents-first, before opening a pack) ===== */
+  .bm-pile-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .bm-pile-detail-card { position: relative; }
+  .bm-pile-detail-img { aspect-ratio: 5/7; border-radius: 8px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.12); cursor: pointer; margin-bottom: 6px; }
+  .bm-pile-detail-img img { width: 100%; height: 100%; object-fit: cover; }
+  .bm-pile-detail-actions { display: flex; gap: 4px; }
+  .bm-pile-detail-actions button { flex: 1; padding: 5px 0; border-radius: 5px; font-size: 9px; font-weight: 700; border: none; cursor: pointer; }
+  .bm-remove-btn { background: rgba(255,59,107,0.15); color: var(--pink); }
+  .bm-side-btn { background: rgba(245,166,35,0.15); color: var(--orange); }
+  .bm-open-pack-btn { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(90deg, var(--teal), #00b8b0); color: #061716; font-weight: 700; padding: 12px 22px; border-radius: 10px; border: none; cursor: pointer; font-size: 13px; }
+  .bm-open-pack-btn:hover { transform: translateY(-1px); }
+  .bm-pile-empty-note { font-size: 12px; color: rgba(255,255,255,0.35); margin-bottom: 20px; }
+
+  /* ===== FANNED PACK HAND VIEW ===== */
+  .bm-hand-row { display: flex; justify-content: center; padding: 30px 0 50px; min-height: 260px; }
+  .bm-hand-card { width: 140px; flex-shrink: 0; margin-left: -55px; transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), margin 0.25s, z-index 0s; transform-origin: bottom center; cursor: pointer; position: relative; }
+  .bm-hand-card:first-child { margin-left: 0; }
+  .bm-hand-card:hover { transform: translateY(-36px) rotate(0deg) scale(1.12); z-index: 50; }
+  .bm-hand-card-img { aspect-ratio: 5/7; border-radius: 10px; overflow: hidden; background: #1a1a22; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 8px 20px rgba(0,0,0,0.4); position: relative; }
+  .bm-hand-card-img img { width: 100%; height: 100%; object-fit: cover; }
+  .bm-hand-card-price { position: absolute; bottom: 4px; left: 4px; background: rgba(0,0,0,0.6); color: var(--orange); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 6px; }
+  .bm-hand-card-actions { display: flex; gap: 3px; margin-top: 6px; opacity: 0; transition: opacity 0.15s; }
+  .bm-hand-card:hover .bm-hand-card-actions { opacity: 1; }
 </style>
 </head>
 <body>
@@ -517,6 +561,7 @@
 <div id="buildModeScreen">
   <div class="bm-hud" id="bmHud"></div>
   <div class="bm-main" id="bmMain"></div>
+  <div class="bm-sideboard-rail" id="bmSideboardRail"></div>
 </div>
 
 <div class="urza-fab">
@@ -699,7 +744,7 @@ function switchTab(tab) {
 // state.cards directly. Nothing touches your actual saved deck until a real Lock In step
 // exists, so you can freely experiment (swap cards, open packs, reroll) without any risk
 // to the live deck. Exiting Build Mode without locking in simply discards the draft.
-let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {} };
+let bmState = { combosOpen: false, typesOpen: false, gameChangers: new Set(), draftCards: [], sideboard: [], currentPack: null, packCategory: null, packDecisions: {}, sideboardCollapsed: false, viewingPile: null };
 
 function bmClassifyCard(name) {
   const d = cardLookup(name);
@@ -856,6 +901,28 @@ function bmToggleAccordion(name) {
   renderBmHud();
 }
 
+function bmCardChip(name) {
+  return `<span style="color:var(--teal);text-decoration:underline dotted;cursor:pointer;" onclick="openCardModal('${name.replace(/'/g,"\\'")}')">${name}</span>`;
+}
+
+function renderBmCombosList() {
+  const complete = state.combosSummary?.completeRaw || [];
+  const oneAway = state.combosSummary?.oneAwayRaw || [];
+  if (complete.length === 0 && oneAway.length === 0) {
+    return `<div class="bm-combo-line">No combos detected yet.</div>`;
+  }
+  let html = '';
+  complete.slice(0, 3).forEach(c => {
+    html += `<div class="bm-combo-line"><span class="bm-combo-status-complete">Complete</span> — ${c.cards.map(bmCardChip).join(' + ')} → ${c.result}</div>`;
+  });
+  oneAway.slice(0, 3).forEach(c => {
+    const nonMissing = c.cards.filter(name => !c.missing.includes(name));
+    const missingChips = c.missing.map(name => `<span style="color:var(--pink);text-decoration:underline dotted;cursor:pointer;font-weight:700;" onclick="openCardModal('${name.replace(/'/g,"\\'")}')">${name}</span>`).join(', ');
+    html += `<div class="bm-combo-line"><span class="bm-combo-status-close">One away</span> — ${nonMissing.map(bmCardChip).join(' + ')}${nonMissing.length ? ' + ' : ''}missing ${missingChips}</div>`;
+  });
+  return html;
+}
+
 function renderBmHud() {
   const synergy = bmSynergyScore();
   const gcCount = bmGameChangerCount();
@@ -875,10 +942,6 @@ function renderBmHud() {
          return `<div class="bm-combo-line"><span class="bm-combo-status-close">One away</span> — ${parts[0]}missing: <span class="bm-combo-missing">${missingName}</span></div>`;
        }).join('')}`
     : `<div class="bm-combo-line">No combos detected yet.</div>`;
-
-  const sideboardHtml = bmState.sideboard.length > 0
-    ? `<div style="display:flex;">${bmState.sideboard.map((c,i) => `<div class="bm-sb-mini" title="${c.name}" onclick="bmReturnFromSideboard(${i})">${c.name.split(' ')[0]}</div>`).join('')}</div>`
-    : `<div style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:6px 0;">Empty</div>`;
 
   document.getElementById('bmHud').innerHTML = `
     <div class="bm-exit" onclick="exitBuildMode()"><i class="ti ti-arrow-left" aria-hidden="true"></i> Exit Build Mode</div>
@@ -900,15 +963,11 @@ function renderBmHud() {
     </div>
     <div class="bm-accordion ${bmState.combosOpen ? 'open' : ''}">
       <div class="bm-accordion-header" onclick="bmToggleAccordion('combos')"><span><i class="ti ti-affiliate" aria-hidden="true"></i> Combos</span><span class="bm-accordion-chevron">⌄</span></div>
-      <div class="bm-accordion-body">${combosHtml}</div>
+      <div class="bm-accordion-body" id="bmCombosBody">${renderBmCombosList()}</div>
     </div>
     <div class="bm-accordion ${bmState.typesOpen ? 'open' : ''}">
       <div class="bm-accordion-header" onclick="bmToggleAccordion('types')"><span><i class="ti ti-cards" aria-hidden="true"></i> Card types</span><span class="bm-accordion-chevron">⌄</span></div>
       <div class="bm-accordion-body">${Object.entries(typeCounts).map(([k,v]) => `<div class="bm-type-row"><span>${k}</span><span>${v}</span></div>`).join('')}</div>
-    </div>
-    <div class="bm-accordion open">
-      <div class="bm-accordion-header" style="color:var(--orange);"><span><i class="ti ti-layers-subtract" aria-hidden="true"></i> Sideboard (${bmState.sideboard.length})</span></div>
-      <div class="bm-accordion-body">${sideboardHtml}</div>
     </div>
     <div class="bm-price">
       <div><div class="bm-price-value">$${totalPrice.toFixed(0)}</div><div class="bm-price-sub">$${ownedPrice.toFixed(0)} already owned</div></div>
@@ -916,6 +975,7 @@ function renderBmHud() {
     </div>
     <div class="bm-lock-in" onclick="bmOpenLockInModal()">Lock in deck</div>
   `;
+  renderBmSideboardRail();
 }
 
 function bmReturnFromSideboard(i) {
@@ -928,8 +988,69 @@ function bmReturnFromSideboard(i) {
   bmAutoSave();
 }
 
+function bmDiscardFromSideboard(i, event) {
+  event.stopPropagation();
+  if (!confirm('Discard this card from your sideboard entirely?')) return;
+  bmState.sideboard.splice(i, 1);
+  renderBmSideboardRail();
+  bmAutoSave();
+}
+
+function bmToggleSideboardCollapse() {
+  bmState.sideboardCollapsed = !bmState.sideboardCollapsed;
+  renderBmSideboardRail();
+}
+
+function bmPreviewSideboardCard(name) {
+  const d = cardLookup(name);
+  const img = d?.image_uris?.normal || '';
+  const previewEl = document.getElementById('bmSbPreview');
+  if (!previewEl) return;
+  previewEl.innerHTML = img ? `<img src="${img}" alt="${name}">` : name;
+}
+
+function renderBmSideboardRail() {
+  const rail = document.getElementById('bmSideboardRail');
+  const collapsed = bmState.sideboardCollapsed;
+  const firstCard = bmState.sideboard[0]?.name;
+  const firstImg = firstCard ? (cardLookup(firstCard)?.image_uris?.normal || '') : '';
+
+  rail.className = 'bm-sideboard-rail' + (collapsed ? ' collapsed' : '');
+  rail.innerHTML = `
+    <div class="bm-sb-header" onclick="bmToggleSideboardCollapse()">
+      <div class="bm-sb-header-title"><i class="ti ti-layers-subtract" aria-hidden="true"></i> <span>Sideboard</span> <span class="bm-sb-count">${bmState.sideboard.length}</span></div>
+      <button class="bm-sb-collapse-btn"><i class="ti ${collapsed ? 'ti-chevron-left' : 'ti-chevron-right'}" aria-hidden="true"></i></button>
+    </div>
+    <div class="bm-sb-body">
+      <div class="bm-sb-preview" id="bmSbPreview">${firstImg ? `<img src="${firstImg}" alt="">` : (bmState.sideboard.length ? '' : 'Hover a card below to preview it here')}</div>
+      ${bmState.sideboard.length === 0
+        ? `<div class="bm-sb-empty">Nothing sideboarded yet. Cards you're unsure about land here.</div>`
+        : `<div class="bm-sb-stack">${bmState.sideboard.map((c, i) => {
+            const d = cardLookup(c.name);
+            const img = d?.image_uris?.normal || '';
+            return `<div class="bm-sb-card" onmouseenter="bmPreviewSideboardCard('${c.name.replace(/'/g,"\\'")}')" onclick="openCardModal('${c.name.replace(/'/g,"\\'")}')" title="${c.name}">
+              ${img ? `<img src="${img}" alt="${c.name}">` : ''}
+              <div class="bm-sb-card-discard" onclick="bmDiscardFromSideboard(${i}, event)" title="Discard entirely"><i class="ti ti-x" aria-hidden="true"></i></div>
+            </div>`;
+          }).join('')}</div>
+          <button class="bm-flat-btn continue" style="width:100%;margin-top:12px;font-size:11px;padding:8px;" onclick="bmReturnAllFromSideboard()">Add all back to deck</button>`
+      }
+    </div>
+  `;
+}
+
+function bmReturnAllFromSideboard() {
+  bmState.sideboard.forEach(c => bmState.draftCards.push(c.name));
+  bmState.sideboard = [];
+  bmState.piles = bmBuildPiles();
+  renderBmMain();
+  renderBmHud();
+  bmAutoSave();
+}
+
 function renderBmMain() {
   if (bmState.currentPack) { renderBmPack(); return; }
+  if (bmState.viewingPile) { renderBmPileDetail(); return; }
   const piles = bmState.piles;
   const orderedKeys = ['ramp','draw','removal','synergy','wincons','lands'];
   const pileHtml = orderedKeys.map(key => {
@@ -937,7 +1058,7 @@ function renderBmMain() {
     const healthy = pile.cards.length >= pile.target;
     const glow = !healthy && key !== 'lands';
     const cardsToShow = pile.cards.slice(0, 3);
-    return `<div class="bm-pile ${glow ? 'glowing' : ''} ${healthy ? 'healthy' : ''}" onclick="bmOpenPack('${key}')">
+    return `<div class="bm-pile ${glow ? 'glowing' : ''} ${healthy ? 'healthy' : ''}" onclick="bmViewPile('${key}')">
       <div class="bm-pile-label-row"><span class="bm-pile-label">${pile.label}</span><span class="bm-pile-count">${pile.cards.length}</span></div>
       <div class="bm-pile-stack">
         ${cardsToShow.map((c,i) => {
@@ -961,12 +1082,66 @@ function renderBmMain() {
       </div>
       <div>
         <div class="bm-commander-name">✦ ${bmState.draftCards[0]}</div>
-        <div class="bm-commander-sub">Tap any pile to open a pack for that role — lands unlock once you're closer to 100 cards</div>
+        <div class="bm-commander-sub">Tap any pile to see what's in it, then open a pack — lands unlock once you're closer to 100 cards</div>
       </div>
     </div>
     <div class="bm-pile-row">${pileHtml}</div>
     <div class="bm-footnote">Build order: <strong>ramp → draw → removal → synergy → win-cons → lands</strong>. Drag/drop is coming next.</div>
   `;
+}
+
+/* ===== PILE DETAIL VIEW (shows what's already in a pile before opening a pack) ===== */
+function bmViewPile(key) {
+  if (key === 'lands' && bmState.draftCards.length < 90) {
+    alert("Lands unlock once your deck is closer to 100 cards — they're always the last step.");
+    return;
+  }
+  bmState.viewingPile = key;
+  renderBmMain();
+}
+
+function renderBmPileDetail() {
+  const key = bmState.viewingPile;
+  const pile = bmState.piles[key];
+  const cardsHtml = pile.cards.map(name => {
+    const d = cardLookup(name);
+    const img = d?.image_uris?.normal || '';
+    return `<div class="bm-pile-detail-card">
+      <div class="bm-pile-detail-img" onclick="openCardModal('${name.replace(/'/g,"\\'")}')">
+        ${img ? `<img src="${img}" alt="${name}">` : ''}
+      </div>
+      <div class="bm-pile-detail-actions">
+        <button class="bm-side-btn" onclick="bmPileCardAction('${key}','${name.replace(/'/g,"\\'")}','sideboard')">Side</button>
+        <button class="bm-remove-btn" onclick="bmPileCardAction('${key}','${name.replace(/'/g,"\\'")}','discard')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('bmMain').innerHTML = `
+    <div class="bm-back-row">
+      <button class="bm-back-btn" onclick="bmState.viewingPile=null;renderBmMain();"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
+      <div>
+        <div class="bm-commander-name">${pile.label}</div>
+        <div class="bm-commander-sub">${pile.cards.length} card${pile.cards.length !== 1 ? 's' : ''} currently in this pile</div>
+      </div>
+    </div>
+    ${pile.cards.length > 0
+      ? `<div class="bm-pile-detail-grid">${cardsHtml}</div>`
+      : `<div class="bm-pile-empty-note">Nothing here yet — open a pack to start filling this pile.</div>`}
+    <button class="bm-open-pack-btn" onclick="bmOpenPack('${key}')"><i class="ti ti-cards" aria-hidden="true"></i> Open a pack for ${pile.label}</button>
+  `;
+}
+
+function bmPileCardAction(pileKey, cardName, action) {
+  const pile = bmState.piles[pileKey];
+  const idx = bmState.draftCards.findIndex(c => c === cardName);
+  if (idx === -1) return;
+  bmState.draftCards.splice(idx, 1);
+  if (action === 'sideboard') bmState.sideboard.push({ name: cardName, from: pileKey });
+  bmState.piles = bmBuildPiles();
+  renderBmPileDetail();
+  renderBmHud();
+  bmAutoSave();
 }
 
 /* ===== PACK GENERATION ===== */
@@ -1048,32 +1223,34 @@ function renderBmPack() {
     const img = d?.image_uris?.normal || '';
     const price = parseFloat(d?.prices?.usd || 0);
     const tagText = decision === 'keep' ? 'KEPT' : decision === 'discard' ? 'DISCARDED' : decision === 'sideboard' ? 'SIDEBOARDED' : '';
-    return `<div class="bm-pack-card">
-      <div class="bm-pack-card-img ${decided ? 'decided' : ''}" onclick="openCardModal('${c.name.replace(/'/g,"\\'")}')">
+    return `<div class="bm-hand-card" style="${decided ? 'opacity:0.35;' : ''}">
+      <div class="bm-hand-card-img" onclick="openCardModal('${c.name.replace(/'/g,"\\'")}')">
         ${img ? `<img src="${img}" alt="${c.name}">` : c.name}
-        ${decided ? `<div class="bm-pack-decided-tag">${tagText}</div><div class="bm-undo-btn" onclick="event.stopPropagation();bmUndoDecision(${i})">Undo</div>` : ''}
+        ${decided ? `<div class="bm-pack-decided-tag">${tagText}</div>` : ''}
         ${c.owned ? `<div class="bm-pack-owned">✓</div>` : ''}
         <div class="bm-pack-score">${c.score || '?'}</div>
+        ${!c.owned && price > 0 ? `<div class="bm-hand-card-price">$${price.toFixed(2)}</div>` : ''}
       </div>
-      <div style="display:flex;justify-content:center;gap:6px;margin-bottom:3px;">
-        ${!c.owned && price > 0 ? `<span style="font-size:10px;color:var(--orange);font-weight:600;">$${price.toFixed(2)}</span>` : ''}
-      </div>
-      <div style="font-size:10px;color:rgba(255,255,255,0.5);text-align:center;margin-bottom:6px;height:26px;overflow:hidden;">${c.reason || ''}</div>
-      <div class="bm-pack-actions">
-        <button class="bm-pack-action keep ${decision==='keep'?'selected':''}" onclick="bmDecide(${i}, 'keep')">Keep</button>
-        <button class="bm-pack-action side ${decision==='sideboard'?'selected':''}" onclick="bmDecide(${i}, 'sideboard')">Side</button>
-        <button class="bm-pack-action discard ${decision==='discard'?'selected':''}" onclick="bmDecide(${i}, 'discard')">✕</button>
+      <div class="bm-hand-card-actions">
+        ${decided
+          ? `<button class="bm-pack-action discard" style="flex:1;" onclick="event.stopPropagation();bmUndoDecision(${i})">Undo</button>`
+          : `<button class="bm-pack-action keep" onclick="event.stopPropagation();bmDecide(${i}, 'keep')">Keep</button>
+             <button class="bm-pack-action side" onclick="event.stopPropagation();bmDecide(${i}, 'sideboard')">Side</button>
+             <button class="bm-pack-action discard" onclick="event.stopPropagation();bmDecide(${i}, 'discard')">✕</button>`}
       </div>
     </div>`;
   }).join('');
 
   document.getElementById('bmMain').innerHTML = `
-    <div class="bm-main-header" style="text-align:center;">
-      <div class="bm-commander-name">Opening a pack for <span style="color:var(--pink);">${pile.label}</span></div>
-      <div class="bm-commander-sub">Keep what fits, Discard what doesn't, Sideboard anything you're unsure about</div>
+    <div class="bm-back-row">
+      <button class="bm-back-btn" onclick="bmState.currentPack=null;renderBmMain();"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
+      <div>
+        <div class="bm-commander-name">Opening a pack for <span style="color:var(--pink);">${pile.label}</span></div>
+        <div class="bm-commander-sub">Hover a card to lift it — Keep, Sideboard, or Discard</div>
+      </div>
     </div>
-    <div class="bm-pack-grid">${cardsHtml}</div>
-    <div style="display:flex;gap:10px;justify-content:center;margin-top:20px;">
+    <div class="bm-hand-row">${cardsHtml}</div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:10px;">
       <button class="bm-flat-btn reroll" onclick="bmRerollPack()"><i class="ti ti-refresh" aria-hidden="true"></i> Reroll this pack</button>
       <button class="bm-flat-btn continue" onclick="bmApplyPack()">Continue →</button>
     </div>
@@ -2086,6 +2263,10 @@ async function runCombos() {
         return `${comboGetCards(c).join(' + ')} → ${comboGetResult(c)} (missing: ${missing.join(', ')}, ${ownedCount}/${missing.length} already owned)`;
       }),
       fromCollection: fromCollection.map(c => `${comboGetCards(c).join(' + ')} → ${comboGetResult(c)} (missing: ${getMissing(c).join(', ')} — ALL already owned in your collection, ready to complete today)`),
+      // Raw structured versions (card arrays intact) so the UI can render each card as a
+      // real clickable element instead of parsing names back out of the text summaries above.
+      completeRaw: included.map(c => ({ cards: comboGetCards(c), result: comboGetResult(c), missing: [] })),
+      oneAwayRaw: oneAway.map(c => ({ cards: comboGetCards(c), result: comboGetResult(c), missing: getMissing(c) })),
     };
     setDeckCache({ combosHtml: body.innerHTML, combosSummary: state.combosSummary });
   } catch (e) {
