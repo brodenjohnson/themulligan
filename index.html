@@ -447,6 +447,20 @@ function closeDeleteModal() {
 async function deleteDeck() {
   const id = document.getElementById('deleteDeckId').value;
   try {
+    // Release this deck's cards back to Bulk before deleting it — otherwise they'd stay
+    // permanently tagged to a deck that no longer exists, and no future reconciliation
+    // would ever touch them again since it only ever pulls cards currently tagged "Bulk".
+    try {
+      const deckToDelete = await TM.getDeck(id);
+      if (deckToDelete) {
+        const deckCards = (deckToDelete.cardlist || '').split('\n').map(s => s.trim()).filter(Boolean);
+        const freshCollection = await TM.getCollection();
+        const collectionRaw = (freshCollection || []).map(c => typeof c === 'string' ? { name: c, quantity: 1, listedIn: 'Bulk' } : c);
+        const { collectionRaw: updated, returnedToBulk } = TM.reconcileDeckCollection(deckCards, [], deckToDelete.name || deckToDelete.commander, collectionRaw);
+        if (returnedToBulk > 0) await TM.saveCollection(updated);
+      }
+    } catch (e) { console.warn('Collection release-on-delete skipped', e); }
+
     await TM.deleteDeck(id);
     closeDeleteModal();
     allDecks = allDecks.filter(d => d.id !== id);
