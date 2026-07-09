@@ -1,0 +1,13 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Local dev helper (added for local running; remove this line if you want to commit it)
+dev-server.mjs
+
+# Tooling / OS
+node_modules/
+.vercel/
+.DS_Store
+*.log
