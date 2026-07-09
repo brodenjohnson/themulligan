@@ -668,6 +668,7 @@ let state = {
   chatHistory: [], currentView: 'grid', deckAnalysed: false,
   wincon: '', theme: '', powerLevel: 3,
   recsSummary: null, combosSummary: null, recsCardNames: [],
+  commanders: [],
   combosPromise: null, recsPromise: null,
   combosData: null, comboCardNames: [], comboCardCounts: {},
   comboFilters: { include: [], exclude: [], sizes: [] },
@@ -751,6 +752,14 @@ async function init() {
       }
       setDeckCache({ cardData: state.cardData });
     }
+    // Now that card data is loaded, work out whether this is a partner/backgrounds/etc. deck
+    // (needs oracle text + type lines). Everything downstream — colour identity, combos,
+    // recommendations, chat — reads the commander(s) from here.
+    state.commanders = detectCommanders();
+    if (state.commanders.length > 1) {
+      document.getElementById('chatBadge').textContent = state.commanders.map(c => c.split(' // ')[0]).join(' + ');
+      renderBannerSub(); // refresh pips/label now that we know both commanders' colours
+    }
     state.deckAnalysed = true;
     renderCardsTab();
     renderStats();
@@ -796,10 +805,66 @@ async function init() {
   }
 }
 
+// Classifies a card by how it can share the command zone, from its real Scryfall text/type.
+// Companion is deliberately NOT here — it's a sideboard mechanic, not a co-commander.
+function commanderPartnerKind(name) {
+  const d = state.cardData[name.toLowerCase()] || state.cardData[name.split(' // ')[0].toLowerCase().trim()];
+  if (!d) return { kind: null };
+  const o = (d.oracle_text || '').toLowerCase();
+  const t = (d.type_line || '').toLowerCase();
+  if (o.includes('friends forever')) return { kind: 'friends-forever' };
+  if (o.includes("doctor's companion")) return { kind: 'doctors-companion' };
+  if (t.includes('time lord doctor')) return { kind: 'doctor' };
+  if (o.includes('choose a background')) return { kind: 'choose-background' };
+  if (t.includes('background')) return { kind: 'background' };
+  const pw = o.match(/partner with ([^(\n.,]+)/); // "Partner with <Name> (reminder…)"
+  if (pw) return { kind: 'partner-with', with: pw[1].trim() };
+  if (/(^|[\s—\n])partner(\b|$)/.test(o)) return { kind: 'partner' }; // plain Partner keyword
+  return { kind: null };
+}
+
+// The deck's commander(s), taken from the top of the list (per the app's "first card is the
+// commander" convention). Card 2 is treated as a co-commander only when cards 0 and 1 form a
+// LEGAL command-zone pairing — otherwise a normal legendary in slot 1 would be misread as a
+// commander, wrongly widening the colour identity. Needs state.cardData loaded first.
+function detectCommanders() {
+  const cards = state.cards || [];
+  if (cards.length === 0) return [];
+  const c0 = cards[0];
+  if (cards.length < 2) return [c0];
+  const c1 = cards[1];
+  const k0 = commanderPartnerKind(c0);
+  const k1 = commanderPartnerKind(c1);
+  const kinds = new Set([k0.kind, k1.kind]);
+  const norm = s => s.split(' // ')[0].toLowerCase().trim();
+  let paired = false;
+  if (k0.kind === 'partner' && k1.kind === 'partner') paired = true;
+  else if (k0.kind === 'friends-forever' && k1.kind === 'friends-forever') paired = true;
+  else if (kinds.has('doctors-companion') && kinds.has('doctor')) paired = true;
+  else if (kinds.has('choose-background') && kinds.has('background')) paired = true;
+  else if (k0.kind === 'partner-with' && k1.kind === 'partner-with') {
+    // A "Partner with X" card can only pair with the specific X it names — confirm the two
+    // reference each other before treating them as co-commanders.
+    paired = !!((k0.with && norm(c1).startsWith(norm(k0.with))) || (k1.with && norm(c0).startsWith(norm(k1.with))));
+  }
+  return paired ? [c0, c1] : [c0];
+}
+
+function getCommanders() {
+  return (state.commanders && state.commanders.length) ? state.commanders : [state.cards[0] || ''];
+}
+
+// Colour identity of the whole command zone = the UNION of every commander's identity.
+// (A partner deck is legal in both commanders' colours combined.)
 function getCommanderColorIdentity() {
-  const commander = state.cards[0] || '';
-  const d = state.cardData[commander.toLowerCase()] || state.cardData[commander.split(' // ')[0].toLowerCase().trim()];
-  if (d?.color_identity) return d.color_identity;
+  const set = new Set();
+  let anyKnown = false;
+  for (const name of getCommanders()) {
+    if (!name) continue;
+    const d = state.cardData[name.toLowerCase()] || state.cardData[name.split(' // ')[0].toLowerCase().trim()];
+    if (d && Array.isArray(d.color_identity)) { anyKnown = true; d.color_identity.forEach(c => set.add(c)); }
+  }
+  if (anyKnown) return [...set];
   if (state.deck?.color_identity) {
     try { return JSON.parse(state.deck.color_identity); } catch { return []; }
   }
@@ -815,16 +880,19 @@ function attachRefreshHandlers() {
 
 function renderBannerSub() {
   const cards = state.cards;
-  const commander = cards[0] || '';
-  const commanderData = state.cardData[commander.toLowerCase()];
-  const colorId = commanderData?.color_identity || (state.deck.color_identity ? JSON.parse(state.deck.color_identity) : []);
+  const colorId = getCommanderColorIdentity();
   const guild = TM.getGuildName(colorId);
+  const commanders = getCommanders();
+  const cmdLabel = commanders.length > 1
+    ? `<span style="font-size:11px;color:rgba(255,255,255,0.55);">· ⚔ ${commanders.map(c => c.split(' // ')[0]).join(' + ')}</span>`
+    : '';
   const sub = document.getElementById('bannerSub');
   sub.innerHTML = `
     <span class="badge badge-bracket">[${state.powerLevel}]</span>
     <span class="banner-card-bg">${cards.length} cards</span>
     ${colorId.map(c => `<div class="pip pip-${c}"></div>`).join('')}
-    <span style="font-size:11px;color:rgba(255,255,255,0.4);">${guild}${state.theme ? ' · ' + state.theme : ''}</span>`;
+    <span style="font-size:11px;color:rgba(255,255,255,0.4);">${guild}${state.theme ? ' · ' + state.theme : ''}</span>
+    ${cmdLabel}`;
 }
 
 function switchTab(tab) {
@@ -2776,7 +2844,7 @@ async function fetchManaRecs(lands, tappedLands) {
     const commanderColors = getCommanderColorIdentity();
     const guildName = TM.getGuildName(commanderColors) || commanderColors.map(c => TM.COLOR_NAMES[c]).join('/') || 'Colourless';
     const prompt = `Analyse this Commander deck's mana base:
-Commander: ${state.cards[0]}
+Commander${getCommanders().length > 1 ? 's' : ''}: ${getCommanders().join(' + ')}
 Colour identity: ${guildName} (${commanderColors.join('') || 'C'})
 Current lands (${lands.length} total): ${lands.join(', ')}
 Tapped lands: ${tappedLands.join(', ')}
@@ -2812,10 +2880,13 @@ Top 5 adds (must produce mana within ${guildName} colours only), top 3 cuts. Pri
   }
 }
 
-async function fetchCombosData(mainCards, commanderName) {
+async function fetchCombosData(mainCards, commanders) {
+  // Accepts a single commander name or an array (partner/backgrounds decks) — Commander
+  // Spellbook's find-my-combos takes a list of commanders in the command zone.
+  const commanderList = Array.isArray(commanders) ? commanders : [commanders];
   const data = await safeFetchJson('/api/combos', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ commanders: [{ card: commanderName }], main: mainCards.map(c => ({ card: c })) }),
+    body: JSON.stringify({ commanders: commanderList.map(c => ({ card: c })), main: mainCards.map(c => ({ card: c })) }),
   });
   if (data.error || data.commanders || data.main) {
     throw new Error(data.error || 'Commander Spellbook could not process this list.');
@@ -3273,10 +3344,14 @@ async function runCombos() {
   try {
     const basics = ['swamp','island','mountain','forest','plains'];
     const deckCardsLower = new Set(state.cards.map(c => c.split(' // ')[0].toLowerCase().trim()));
-    const commanderName = state.cards[0].split(' // ')[0].trim();
-    const deckMain = [...new Set(state.cards.slice(1).filter(c => !basics.includes(c.toLowerCase())).map(c => c.split(' // ')[0].trim()))];
+    // Send every commander (1 for a normal deck, 2 for partners/backgrounds) to Commander
+    // Spellbook, and start the "main" list after the commander slot(s) so the co-commander
+    // isn't double-counted as a regular deck card.
+    const commanderNames = getCommanders().map(c => c.split(' // ')[0].trim());
+    const commanderCount = getCommanders().length;
+    const deckMain = [...new Set(state.cards.slice(commanderCount).filter(c => !basics.includes(c.toLowerCase())).map(c => c.split(' // ')[0].trim()))];
 
-    const results = await fetchCombosData(deckMain, commanderName);
+    const results = await fetchCombosData(deckMain, commanderNames);
     const included = results.included || [];
     // Commander Spellbook returns the FULL exhaustive list of near-miss combos for the
     // deck in this one response (deck size is well under their 600-card API limit, so
@@ -3350,11 +3425,13 @@ async function runRecommendations(focus) {
   const container = document.getElementById('recsContent');
   container.innerHTML = `<div class="empty-state"><div class="empty-title"><span class="spinner"></span> ${focus ? `Finding ${focusLabels[focus] || focus} cards...` : 'Fetching recommendations...'}</div></div>`;
   try {
+    const recCommanders = getCommanders().map(c => c.split(' // ')[0]);
     let recs = [];
     try {
       const recRes = await fetch('/api/recommander', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ card_format: 'name', commander: state.cards[0].split(' // ')[0], partner: null, deck: state.cards.slice(1) }),
+        // Recommander takes a primary commander + optional partner, then the rest of the deck.
+        body: JSON.stringify({ card_format: 'name', commander: recCommanders[0], partner: recCommanders[1] || null, deck: state.cards.slice(recCommanders.length) }),
       });
       if (recRes.ok) { const d = await recRes.json(); recs = (d.data?.recommendations || []).slice(0, 20); }
     } catch (e) { console.warn('Recommander unavailable, using AI only', e); }
@@ -3382,9 +3459,13 @@ async function runRecommendations(focus) {
 
     const commanderColors = getCommanderColorIdentity();
     const ciDisplay = commanderColors.length ? commanderColors.join('') : 'colourless (no coloured mana symbols allowed at all)';
+    const commanderList = getCommanders().map(c => c.split(' // ')[0]);
+    const commanderHeading = commanderList.length > 1
+      ? `Commander deck with partner commanders: ${commanderList.map(c => `"${c}"`).join(' + ')}`
+      : `Commander deck: "${commanderList[0]}"`;
 
-    const prompt = `Commander deck: "${state.cards[0].split(' // ')[0]}"
-Commander colour identity: ${ciDisplay} — this is a Commander (EDH) deck, so EVERY card is restricted to this colour identity.
+    const prompt = `${commanderHeading}
+Commander colour identity: ${ciDisplay} — this is a Commander (EDH) deck, so EVERY card is restricted to this colour identity (the combined identity of ${commanderList.length > 1 ? 'both commanders' : 'the commander'}).
 Win condition: ${state.wincon || 'Not specified yet — infer the most likely win condition purely from the actual decklist below'}
 Theme: ${state.theme || 'none'}
 Power level: ${state.powerLevel}/5
@@ -3452,9 +3533,10 @@ Return JSON only, no markdown:
     function attachValidSwap(r) {
       if (!r.swap_for) return r;
       const swapKey = r.swap_for.split(' // ')[0].toLowerCase().trim();
-      const commanderKey = state.cards[0].split(' // ')[0].toLowerCase().trim();
+      // Never propose cutting a commander — protect all of them (both, for a partner deck).
+      const commanderKeys = new Set(getCommanders().map(c => c.split(' // ')[0].toLowerCase().trim()));
       const match = state.cards.find(c => c.split(' // ')[0].toLowerCase().trim() === swapKey);
-      if (match && swapKey !== commanderKey) return { ...r, swap_for: match };
+      if (match && !commanderKeys.has(swapKey)) return { ...r, swap_for: match };
       return { ...r, swap_for: null };
     }
     const ownedNotInDeckLowerSet = new Set(ownedNotInDeckAll.map(n => n.toLowerCase()));
@@ -3642,7 +3724,7 @@ function buildContext() {
   return `${SYSTEM_PROMPT}
 
 DECK CONTEXT:
-Commander: ${state.cards[0]}
+Commander${getCommanders().length > 1 ? 's (partner pair — the deck runs both in the command zone)' : ''}: ${getCommanders().join(' + ')}
 Full decklist: ${state.cards.join(', ')}
 Win condition: ${state.wincon || 'Unknown'}
 Theme: ${state.theme || 'None'}

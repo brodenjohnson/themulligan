@@ -2,6 +2,36 @@
 
 All notable changes to The Mulligan are documented here.
 
+## 2026-07-09 — Partner / co-commander support
+
+Decks with two commanders in the command zone are now supported end-to-end.
+
+### Added
+
+- **Partner commanders (and friends).** The app auto-detects a second commander from the top
+  of the decklist and treats the whole command zone as a pair. Covers **Partner**, **Partner
+  with [name]** (name-matched), **Choose a Background** + **Background**, **Friends forever**,
+  and **Doctor's companion** + **Time Lord Doctor**. Detection reads real Scryfall oracle
+  text/type lines and only pairs cards 0 and 1 when they form a *legal* pairing, so a normal
+  legendary in the second slot can't be misread as a commander. (Companion is excluded — it's
+  a sideboard mechanic, not a co-commander.)
+
+### Fixed / Changed
+
+- **Colour identity is now the union of both commanders.** This is the key fix — off-colour
+  recommendations, the collection filter, and mana analysis all derive from it, so a partner
+  deck no longer treats half its legal cards as off-colour.
+- **Combos** send both commanders to Commander Spellbook, and the deck list passed alongside
+  starts after the commander slot(s) so a co-commander isn't double-counted.
+- **Recommender** now sends the second commander in its `partner` field (was hardcoded null).
+- **Urza chat, recommendations, and mana prompts** name both commanders, describe the colour
+  constraint as the combined identity, and protect *both* commanders from "swap out" cuts.
+- **Banner** shows the union colour pips and a "⚔ Commander A + Commander B" label.
+
+### Not covered
+
+- Build Mode (the build-from-scratch drafting flow) remains single-commander for now.
+
 ## 2026-07-09
 
 A batch of Combos-tab features, a Moxfield deck importer, and two correctness fixes to
