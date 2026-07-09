@@ -570,6 +570,21 @@ function parseDeckList(text) {
   return cards;
 }
 
+// Imports a deck from a Moxfield share link via the /api/moxfield serverless proxy (Moxfield's
+// API can't be reached directly from the browser — CORS, and it needs a server-set User-Agent).
+// Returns { name, format, commander, hasCommander, cardlist, counts } or throws with a
+// user-facing message (e.g. deck private, or Moxfield import not enabled on this server yet).
+async function fetchMoxfieldDeck(url) {
+  const res = await fetch('/api/moxfield', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Couldn't import from Moxfield (HTTP ${res.status}).`);
+  return data;
+}
+
 async function validateDeckList(cards) {
   if (cards.length === 0) return { ok: false, error: 'No cards detected. Check your format.' };
   const sample = [...new Set(cards)].slice(0, 10);
@@ -766,7 +781,7 @@ window.TM = {
   SUPABASE_URL, SUPABASE_KEY,
   sbFetch, getSession, setSession, signIn, signUp, signOut, requireAuth, refreshSession,
   getDecks, getDeck, saveDeck, deleteDeck, getCollection, saveCollection,
-  fetchScryfallBulk, parseDeckList, parseCollection,
+  fetchScryfallBulk, parseDeckList, parseCollection, fetchMoxfieldDeck,
   countPips, recommendedSources,
   COLOR_NAMES, COLOR_HEX, GUILD_NAMES, getGuildName,
   isLand, isTappedLand,

@@ -17,6 +17,10 @@
     "api/recommander.js": {
       "memory": 512,
       "maxDuration": 30
+    },
+    "api/moxfield.js": {
+      "memory": 512,
+      "maxDuration": 30
     }
   }
 }

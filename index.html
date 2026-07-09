@@ -230,6 +230,17 @@
 <div class="modal-overlay" id="newDeckModal">
   <div class="modal">
     <div class="modal-title">New deck</div>
+    <div class="field" style="margin-bottom:14px;">
+      <label style="display:block;font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:5px;">Import from Moxfield</label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="moxUrl" placeholder="https://moxfield.com/decks/…" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();importFromMoxfield();}">
+        <button class="btn btn-ghost" id="moxImportBtn" onclick="importFromMoxfield()">Import</button>
+      </div>
+      <div id="moxStatus" style="font-size:11px;color:var(--ink3);margin-top:4px;"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;color:var(--ink3);font-size:11px;">
+      <span style="flex:1;height:1px;background:var(--border);"></span>or paste manually<span style="flex:1;height:1px;background:var(--border);"></span>
+    </div>
     <div class="field" style="margin-bottom:12px;">
       <label style="display:block;font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:5px;">Deck name</label>
       <input type="text" id="newDeckName" placeholder="e.g. Norman Osborn" style="width:100%;">
@@ -802,6 +813,42 @@ function closeNewDeckModal() {
   document.getElementById('newDeckName').value = '';
   document.getElementById('newDeckCardCount').textContent = '';
   document.getElementById('newDeckError').style.display = 'none';
+  document.getElementById('moxUrl').value = '';
+  document.getElementById('moxStatus').textContent = '';
+}
+
+async function importFromMoxfield() {
+  const url = document.getElementById('moxUrl').value.trim();
+  const statusEl = document.getElementById('moxStatus');
+  const btn = document.getElementById('moxImportBtn');
+  if (!url) { statusEl.style.color = 'var(--pink)'; statusEl.textContent = 'Paste a Moxfield deck link first.'; return; }
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.innerHTML = '<span class="spinner"></span>';
+  statusEl.style.color = 'var(--ink3)';
+  statusEl.textContent = 'Fetching from Moxfield…';
+  try {
+    const data = await TM.fetchMoxfieldDeck(url);
+    document.getElementById('newDeckList').value = data.cardlist;
+    const nameInput = document.getElementById('newDeckName');
+    if (!nameInput.value.trim() && data.name) nameInput.value = data.name;
+    // Reuse the existing input handler to refresh the "N cards detected · Commander: …" line.
+    document.getElementById('newDeckList').dispatchEvent(new Event('input'));
+    const total = (data.counts?.commanders || 0) + (data.counts?.mainboard || 0);
+    if (data.hasCommander) {
+      statusEl.style.color = '#007a76';
+      statusEl.textContent = `✓ Imported ${total} cards. Review and save below.`;
+    } else {
+      statusEl.style.color = '#8a6000';
+      statusEl.textContent = `✓ Imported ${total} cards — no commander on the deck, so the first card will be treated as commander. Review below.`;
+    }
+  } catch (e) {
+    statusEl.style.color = 'var(--pink)';
+    statusEl.textContent = e.message || 'Import failed.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
 }
 
 document.getElementById('newDeckList').addEventListener('input', () => {

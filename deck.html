@@ -46,8 +46,6 @@
   .rec-col-header { font-size: 11px; font-weight: 600; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 
   /* COMBOS */
-  .combo-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; margin-top: 20px; }
-  .combo-section-header:first-child { margin-top: 0; }
   .accordion-header { display: flex; align-items: center; gap: 8px; padding: 10px 4px; cursor: pointer; user-select: none; }
   .accordion-chevron { display: inline-block; font-size: 14px; color: var(--ink3); transition: transform 0.15s; }
   .accordion-panel { padding: 4px 0 8px; }
@@ -55,6 +53,33 @@
   .cs-complete { background: rgba(0,212,204,0.1); color: #007a76; border-color: rgba(0,212,204,0.3); }
   .cs-one { background: rgba(245,166,35,0.1); color: #8a6000; border-color: rgba(245,166,35,0.3); }
   .cs-more { background: var(--bg); color: var(--ink3); border-color: var(--border); }
+  .combo-load-more-row { display: flex; align-items: center; gap: 12px; padding: 10px 0 4px; }
+  .combo-load-more-btn { background: rgba(0,212,204,0.08); border: 1px dashed rgba(0,212,204,0.4); color: #007a76; font-size: 12px; font-weight: 600; padding: 8px 16px; border-radius: 7px; cursor: pointer; }
+  .combo-load-more-btn:hover { background: rgba(0,212,204,0.16); }
+  .combo-load-more-count { font-size: 11px; color: var(--ink3); }
+  /* COMBO FILTERS */
+  .combo-filter-bar { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 18px; }
+  .combo-filter-title { font-size: 12px; font-weight: 600; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  .combo-filter-hint { font-size: 11px; color: var(--ink3); margin-bottom: 13px; }
+  .combo-filter-grid { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 16px; align-items: start; }
+  .combo-filter-field label { display: block; font-size: 11px; font-weight: 600; color: var(--ink2); margin-bottom: 5px; }
+  .combo-filter-input { width: 100%; font-size: 13px; padding: 7px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--ink); outline: none; }
+  .combo-filter-input:focus { border-color: var(--teal); background: var(--card); }
+  .combo-sort-select { cursor: pointer; }
+  .combo-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .combo-chips:empty { display: none; }
+  .combo-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; padding: 3px 4px 3px 9px; border-radius: 12px; border: 0.5px solid; }
+  .combo-chip button { background: none; border: none; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 3px; border-radius: 50%; color: inherit; opacity: 0.65; }
+  .combo-chip button:hover { opacity: 1; }
+  .combo-chip-include { background: rgba(0,212,204,0.1); color: #007a76; border-color: rgba(0,212,204,0.35); }
+  .combo-chip-exclude { background: rgba(255,59,107,0.1); color: #b3003a; border-color: rgba(255,59,107,0.35); }
+  .combo-size-toggles { display: flex; gap: 6px; }
+  .combo-size-toggles:empty::after { content: '—'; color: var(--ink3); font-size: 12px; }
+  .combo-size-toggle { min-width: 36px; text-align: center; font-size: 12px; font-weight: 600; padding: 7px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--ink2); cursor: pointer; }
+  .combo-size-toggle:hover { border-color: var(--teal); }
+  .combo-size-toggle.active { background: rgba(0,212,204,0.12); color: #007a76; border-color: var(--teal); }
+  .combo-filter-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 10px; border-top: 0.5px solid var(--border); }
+  @media (max-width: 720px) { .combo-filter-grid { grid-template-columns: 1fr; } }
 
   /* MANA BASE */
   .mana-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -642,14 +667,29 @@ let state = {
   deck: null, cards: [], cardData: {}, collection: new Set(), collectionRaw: [],
   chatHistory: [], currentView: 'grid', deckAnalysed: false,
   wincon: '', theme: '', powerLevel: 3,
-  recsSummary: null, combosSummary: null,
+  recsSummary: null, combosSummary: null, recsCardNames: [],
   combosPromise: null, recsPromise: null,
+  combosData: null, comboCardNames: [], comboCardCounts: {},
+  comboFilters: { include: [], exclude: [], sizes: [] },
+  comboSort: 'default',
+  comboShown: { included: 15, oneAway: 15, twoAway: 15, collection: 15 },
   selectMode: false, selectedCards: new Set(),
   intakeAnswered: false,
   recsFocus: null,
 };
 
 const CACHE_KEY = `mulligan_cache_v3_${deckId}`;
+// Bumped whenever the cached combos payload changes shape OR meaning, so decks with a
+// still-valid cache re-fetch instead of serving stale data. v3 switched from caching
+// rendered HTML to caching trimmed combo data (combosData). v4 corrected getMissing to
+// front-face-normalize DFC/split names — that changed each combo's missing list and which
+// bucket it lands in, all baked into combosData, so old caches must re-fetch. Scoped to the
+// combos payload — cardData is untouched, so this never forces a Scryfall re-fetch.
+const COMBOS_UI_VERSION = 4;
+// Same idea for the cached Recommendations HTML. Bumped when a fix changes which cards can
+// appear so already-cached recs re-run instead of serving stale output. v1: added a hard
+// colour-identity filter so off-colour cards can no longer appear in the best/themed columns.
+const RECS_VERSION = 1;
 
 function getDeckCache() {
   try {
@@ -716,16 +756,16 @@ async function init() {
     renderStats();
     renderManaBase();
 
-    if (validCache && cache.combosHtml) {
-      document.getElementById('combosBody').innerHTML = cache.combosHtml;
+    if (validCache && cache.combosData && cache.combosUiVersion === COMBOS_UI_VERSION) {
+      state.combosData = cache.combosData;
       state.combosSummary = cache.combosSummary || null;
+      initCombosPane();
       state.combosPromise = Promise.resolve();
-      attachRefreshHandlers();
     } else {
       state.combosPromise = runCombos();
     }
 
-    if (validCache && cache.recsHtml) {
+    if (validCache && cache.recsHtml && cache.recsVersion === RECS_VERSION) {
       document.getElementById('recsContent').innerHTML = cache.recsHtml;
       state.recsSummary = cache.recsSummary || null;
       state.recsPromise = Promise.resolve();
@@ -2802,9 +2842,17 @@ function renderComboCard(combo, missing, ownedNotInDeckLower) {
         const ownsInBulk = isMissing && (state.collection.has(name.toLowerCase()) || (ownedNotInDeckLower && ownedNotInDeckLower.has(name.toLowerCase())));
         const cardObj = (combo.uses || []).find(u => u.card?.name === name)?.card;
         const img = cardObj?.imageUriFrontNormal || state.cardData[name.toLowerCase()]?.image_uris?.normal || '';
+        // How many distinct combos in this deck's list this card appears in (this one
+        // included). Doubles as a one-click "show only that card's combos" filter — the
+        // stopPropagation keeps the click off the thumbnail's open-card-modal handler.
+        const comboCount = (state.comboCardCounts || {})[comboNorm(name)] || 0;
+        const countChip = comboCount > 0
+          ? `<div class="combo-thumb-foot"><button type="button" class="combo-thumb-filter" onclick="event.stopPropagation();comboQuickFilter('${name.replace(/'/g,"\\'")}')" title="Show only the ${comboCount} combo${comboCount !== 1 ? 's' : ''} using ${comboEsc(name)}"><i class="ti ti-affiliate" aria-hidden="true"></i>${comboCount} combo${comboCount !== 1 ? 's' : ''}</button></div>`
+          : '';
         return `<div class="combo-mtg-thumb ${isMissing ? (ownsInBulk ? 'combo-thumb-owned' : 'combo-thumb-missing') : ''}" onclick="openCardModal('${name.replace(/'/g,"\\'")}')" style="cursor:pointer;">
-          <div class="combo-thumb-img">${img ? `<img src="${img}" alt="${name}" style="width:100%;height:100%;object-fit:cover;">` : name}</div>
+          <div class="combo-thumb-img">${img ? `<img src="${img}" alt="${name}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;">` : name}</div>
           <div class="combo-thumb-name">${name.split(',')[0]}${isMissing ? (ownsInBulk ? ' ✓ own' : ' (missing)') : ''}</div>
+          ${countChip}
         </div>`;
       }).join('')}
     </div>
@@ -2819,14 +2867,404 @@ function renderComboCard(combo, missing, ownedNotInDeckLower) {
   </div>`;
 }
 
-let comboAccordionState = { oneAway: true, twoAway: false, collection: false };
+let comboAccordionState = { included: true, oneAway: true, twoAway: false, collection: false };
 
 function toggleComboAccordion(section) {
-  comboAccordionState[section] = !comboAccordionState[section];
   const panel = document.getElementById(`combo-acc-${section}`);
   const chevron = document.getElementById(`combo-chev-${section}`);
-  if (panel) panel.style.display = comboAccordionState[section] ? 'block' : 'none';
-  if (chevron) chevron.style.transform = comboAccordionState[section] ? 'rotate(90deg)' : 'rotate(0deg)';
+  if (!panel) return;
+  // Derive the target state from what's actually on screen, not from comboAccordionState —
+  // the filter engine may have force-opened/closed panels, so the recorded state can lag
+  // the DOM. Reading the live display keeps the toggle in sync either way.
+  const willOpen = panel.style.display === 'none';
+  panel.style.display = willOpen ? 'block' : 'none';
+  if (chevron) chevron.style.transform = willOpen ? 'rotate(90deg)' : 'rotate(0deg)';
+  comboAccordionState[section] = willOpen;
+}
+
+/* ===== COMBO LIST: FILTERS + PAGINATION =====
+   The combos pane renders from state.combosData (four arrays of trimmed combo objects,
+   each carrying a precomputed ._missing) rather than from cached HTML. That's what lets
+   the include/exclude/size filters re-narrow the COMPLETE set on the fly — fresh load and
+   cache-restore share one render path. The filter bar is built once and left alone; only
+   #comboSections is re-rendered when a filter or "show more" fires, so input focus and the
+   datalist survive. Pagination is a pure display concern (show COMBO_PAGE_SIZE, reveal
+   more) operating over the filtered arrays; card images are lazy-loaded. */
+const COMBO_PAGE_SIZE = 15;
+
+// Minimal HTML escaping for card names dropped into text / attributes (names carry
+// apostrophes, commas, the odd ampersand). Removal buttons pass an index, never the raw
+// name, so there's no quote-in-onclick hazard to worry about.
+function comboEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function comboNorm(name) { return name.split(' // ')[0].toLowerCase().trim(); }
+
+// Trim a Commander Spellbook combo to just what renderComboCard / comboGetCards /
+// comboGetResult read, plus the precomputed missing list. Keeps the cached payload small
+// (no repeated markup) while preserving card art for missing pieces (imageUriFrontNormal).
+function trimCombo(combo, missing) {
+  return {
+    id: combo.id,
+    popularity: combo.popularity,
+    uses: (combo.uses || []).map(u => ({ card: { name: u.card?.name, imageUriFrontNormal: u.card?.imageUriFrontNormal } })),
+    produces: (combo.produces || []).map(p => ({ feature: { name: p.feature?.name } })),
+    description: combo.description,
+    _missing: missing,
+  };
+}
+
+function comboFiltersActive() {
+  const f = state.comboFilters;
+  return !!(f.include.length || f.exclude.length || f.sizes.length);
+}
+
+function comboMatchesFilters(combo) {
+  const f = state.comboFilters;
+  if (!comboFiltersActive()) return true;
+  const cardsLower = comboGetCards(combo).map(comboNorm);
+  // Include = combo uses ANY of the included cards; exclude = uses NONE of the excluded.
+  if (f.include.length && !f.include.some(n => cardsLower.includes(comboNorm(n)))) return false;
+  if (f.exclude.length && f.exclude.some(n => cardsLower.includes(comboNorm(n)))) return false;
+  if (f.sizes.length) {
+    const size = cardsLower.length;
+    if (!f.sizes.some(s => s === 5 ? size >= 5 : size === s)) return false;
+  }
+  return true;
+}
+
+function computeOwnedAnywhere() {
+  return new Set((state.collectionRaw || []).map(c => comboNorm(c.name || '')));
+}
+
+// Map of normalized card name → how many DISTINCT combos in this deck's list use it.
+// A combo can appear in more than one section array (e.g. one-away AND ready-from-
+// collection), so combos are keyed by id to avoid double-counting a single combo.
+function computeComboCardCounts() {
+  const data = state.combosData || { included: [], oneAway: [], twoAway: [], fromCollection: [] };
+  const all = [...data.included, ...data.oneAway, ...data.twoAway, ...data.fromCollection];
+  const sets = {};
+  all.forEach((c, i) => {
+    const comboKey = c.id != null ? 'id:' + c.id : 'ix:' + i;
+    comboGetCards(c).forEach(name => {
+      const k = comboNorm(name);
+      (sets[k] || (sets[k] = new Set())).add(comboKey);
+    });
+  });
+  const counts = {};
+  for (const k in sets) counts[k] = sets[k].size;
+  return counts;
+}
+
+// ---- pane bootstrap: both fresh load and cache-restore land here ----
+function initCombosPane() {
+  const body = document.getElementById('combosBody');
+  const data = state.combosData || { included: [], oneAway: [], twoAway: [], fromCollection: [] };
+  const total = data.included.length + data.oneAway.length + data.twoAway.length + data.fromCollection.length;
+
+  if (total === 0) {
+    body.innerHTML = `<div style="padding:20px 24px;">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:4px;"><a id="combosRefreshBtn" class="stat-link" style="cursor:pointer;">↻ Refresh</a></div>
+      <div class="empty-state"><div class="empty-title">No combos found</div><div class="empty-sub">This deck has no known combo lines in Commander Spellbook.</div></div>
+    </div>`;
+    attachRefreshHandlers();
+    return;
+  }
+
+  // Fresh pane → filters cleared, sort reset, pagination reset. (All session-only, not cached.)
+  state.comboFilters = { include: [], exclude: [], sizes: [] };
+  state.comboSort = 'default';
+  state.comboShown = { included: COMBO_PAGE_SIZE, oneAway: COMBO_PAGE_SIZE, twoAway: COMBO_PAGE_SIZE, collection: COMBO_PAGE_SIZE };
+
+  // Datalist universe: every distinct card name appearing anywhere in these combos.
+  const seen = new Set();
+  const names = [];
+  [...data.included, ...data.oneAway, ...data.twoAway, ...data.fromCollection].forEach(c => {
+    comboGetCards(c).forEach(n => {
+      const key = n.toLowerCase();
+      if (n && !seen.has(key)) { seen.add(key); names.push(n); }
+    });
+  });
+  names.sort((a, b) => a.localeCompare(b));
+  state.comboCardNames = names;
+  state.comboCardCounts = computeComboCardCounts();
+
+  body.innerHTML = `<div style="padding:20px 24px;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:4px;"><a id="combosRefreshBtn" class="stat-link" style="cursor:pointer;">↻ Refresh</a></div>
+    ${renderComboFilterBar()}
+    <div id="comboSections"></div>
+  </div>`;
+
+  attachComboFilterHandlers();
+  renderComboSizeToggles();
+  renderComboSections();
+  updateComboFilterSummary();
+  attachRefreshHandlers();
+}
+
+function renderComboFilterBar() {
+  const opts = state.comboCardNames.map(n => `<option value="${comboEsc(n)}"></option>`).join('');
+  return `<div class="combo-filter-bar" id="comboFilterBar">
+    <div class="combo-filter-title"><i class="ti ti-filter" aria-hidden="true"></i> Filter combos</div>
+    <div class="combo-filter-hint">Shows combos that use <b>any</b> included card and <b>none</b> of the excluded cards.</div>
+    <div class="combo-filter-grid">
+      <div class="combo-filter-field">
+        <label for="comboIncludeInput">Include cards</label>
+        <input class="combo-filter-input" id="comboIncludeInput" list="comboCardList" placeholder="Type a card name…" autocomplete="off" />
+        <div class="combo-chips" id="comboIncludeChips"></div>
+      </div>
+      <div class="combo-filter-field">
+        <label for="comboExcludeInput">Exclude cards</label>
+        <input class="combo-filter-input" id="comboExcludeInput" list="comboCardList" placeholder="Type a card name…" autocomplete="off" />
+        <div class="combo-chips" id="comboExcludeChips"></div>
+      </div>
+      <div class="combo-filter-field">
+        <label>Combo size</label>
+        <div class="combo-size-toggles" id="comboSizeToggles"></div>
+      </div>
+      <div class="combo-filter-field">
+        <label for="comboSortSelect">Sort by</label>
+        <select class="combo-filter-input combo-sort-select" id="comboSortSelect">
+          <option value="default"${state.comboSort === 'default' ? ' selected' : ''}>Default order</option>
+          <option value="popular"${state.comboSort === 'popular' ? ' selected' : ''}>Most used</option>
+          <option value="unpopular"${state.comboSort === 'unpopular' ? ' selected' : ''}>Least used</option>
+        </select>
+      </div>
+    </div>
+    <div class="combo-filter-foot">
+      <span class="combo-load-more-count" id="comboFilterSummary"></span>
+      <a class="stat-link" id="comboClearFilters" style="cursor:pointer;display:none;">Clear filters</a>
+    </div>
+    <datalist id="comboCardList">${opts}</datalist>
+  </div>`;
+}
+
+function comboPresentSizes() {
+  const data = state.combosData;
+  const sizes = new Set();
+  [...data.included, ...data.oneAway, ...data.twoAway, ...data.fromCollection].forEach(c => {
+    const n = comboGetCards(c).length;
+    sizes.add(n >= 5 ? 5 : n);
+  });
+  return [...sizes].sort((a, b) => a - b);
+}
+
+function renderComboSizeToggles() {
+  const box = document.getElementById('comboSizeToggles');
+  if (!box) return;
+  box.innerHTML = comboPresentSizes().map(s => {
+    const active = state.comboFilters.sizes.includes(s);
+    const label = s === 5 ? '5+' : String(s);
+    return `<button class="combo-size-toggle ${active ? 'active' : ''}" onclick="comboToggleSize(${s})" aria-pressed="${active}">${label}</button>`;
+  }).join('');
+}
+
+function comboToggleSize(s) {
+  const arr = state.comboFilters.sizes;
+  const i = arr.indexOf(s);
+  if (i === -1) arr.push(s); else arr.splice(i, 1);
+  onComboFiltersChanged();
+}
+
+// Map free text (typed or picked from the datalist) to a real combo card name. Exact
+// case-insensitive match wins; otherwise a unique prefix, then a unique substring. Returns
+// null when the text is empty or ambiguous, so a stray partial doesn't silently add a card.
+function resolveComboCard(text) {
+  const t = (text || '').trim().toLowerCase();
+  if (!t) return null;
+  const names = state.comboCardNames;
+  const exact = names.find(n => n.toLowerCase() === t);
+  if (exact) return exact;
+  const prefix = names.filter(n => n.toLowerCase().startsWith(t));
+  if (prefix.length === 1) return prefix[0];
+  const sub = names.filter(n => n.toLowerCase().includes(t));
+  if (sub.length === 1) return sub[0];
+  return null;
+}
+
+function addComboFilterCard(kind, input) {
+  const resolved = resolveComboCard(input.value);
+  if (!resolved) return;   // unresolvable text is left in the box rather than wiped
+  input.value = '';
+  const list = state.comboFilters[kind];
+  const other = kind === 'include' ? 'exclude' : 'include';
+  if (!list.some(n => n.toLowerCase() === resolved.toLowerCase())) list.push(resolved);
+  // A card can't be both included and excluded — adding to one side clears it from the other.
+  state.comboFilters[other] = state.comboFilters[other].filter(n => n.toLowerCase() !== resolved.toLowerCase());
+  onComboFiltersChanged();
+}
+
+function removeComboFilterCard(kind, i) {
+  state.comboFilters[kind].splice(i, 1);
+  onComboFiltersChanged();
+}
+
+// One-click filter from a card thumbnail: focus the list on exactly that card's combos.
+// Replaces (not appends to) the current filter so the result matches the count on the
+// chip, then scrolls the filter bar into view so it's clear a filter is now active.
+function comboQuickFilter(name) {
+  const resolved = resolveComboCard(name) || name;
+  state.comboFilters = { include: [resolved], exclude: [], sizes: [] };
+  const inc = document.getElementById('comboIncludeInput'); if (inc) inc.value = '';
+  const exc = document.getElementById('comboExcludeInput'); if (exc) exc.value = '';
+  onComboFiltersChanged();
+  const bar = document.getElementById('comboFilterBar');
+  if (bar && bar.scrollIntoView) bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function clearComboFilters() {
+  state.comboFilters = { include: [], exclude: [], sizes: [] };
+  const inc = document.getElementById('comboIncludeInput'); if (inc) inc.value = '';
+  const exc = document.getElementById('comboExcludeInput'); if (exc) exc.value = '';
+  onComboFiltersChanged();
+}
+
+function attachComboFilterHandlers() {
+  [['include', 'comboIncludeInput'], ['exclude', 'comboExcludeInput']].forEach(([kind, id]) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    // 'change' fires on datalist pick / blur; Enter adds without leaving the field.
+    input.addEventListener('change', () => addComboFilterCard(kind, input));
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addComboFilterCard(kind, input); } });
+  });
+  const clear = document.getElementById('comboClearFilters');
+  if (clear) clear.onclick = clearComboFilters;
+  const sortSel = document.getElementById('comboSortSelect');
+  if (sortSel) sortSel.addEventListener('change', () => onComboSortChanged(sortSel.value));
+}
+
+// Sort is a view preference, independent of the filters — changing it doesn't touch the
+// include/exclude/size selections. Reset pagination so the user lands at the top of the
+// freshly-ordered list, then re-render the sections.
+function onComboSortChanged(value) {
+  state.comboSort = value;
+  state.comboShown = { included: COMBO_PAGE_SIZE, oneAway: COMBO_PAGE_SIZE, twoAway: COMBO_PAGE_SIZE, collection: COMBO_PAGE_SIZE };
+  renderComboSections();
+}
+
+function renderComboChips() {
+  const chip = (kind, i, name) => `<span class="combo-chip combo-chip-${kind}">${comboEsc(name)}<button type="button" onclick="removeComboFilterCard('${kind}',${i})" aria-label="Remove ${comboEsc(name)}">×</button></span>`;
+  const incBox = document.getElementById('comboIncludeChips');
+  const excBox = document.getElementById('comboExcludeChips');
+  if (incBox) incBox.innerHTML = state.comboFilters.include.map((n, i) => chip('include', i, n)).join('');
+  if (excBox) excBox.innerHTML = state.comboFilters.exclude.map((n, i) => chip('exclude', i, n)).join('');
+}
+
+function updateComboFilterSummary() {
+  const el = document.getElementById('comboFilterSummary');
+  const clear = document.getElementById('comboClearFilters');
+  const data = state.combosData;
+  const total = data.included.length + data.oneAway.length + data.twoAway.length + data.fromCollection.length;
+  const active = comboFiltersActive();
+  if (clear) clear.style.display = active ? '' : 'none';
+  if (!el) return;
+  if (!active) { el.textContent = `${total} combo${total !== 1 ? 's' : ''} total`; return; }
+  const matched = [data.included, data.oneAway, data.twoAway, data.fromCollection]
+    .reduce((sum, arr) => sum + arr.filter(comboMatchesFilters).length, 0);
+  el.textContent = `${matched} of ${total} combo${total !== 1 ? 's' : ''} match your filters`;
+}
+
+// Everything that changes a filter funnels through here: reset pagination, repaint the
+// chips + size toggles + section bodies, and refresh the summary line.
+function onComboFiltersChanged() {
+  state.comboShown = { included: COMBO_PAGE_SIZE, oneAway: COMBO_PAGE_SIZE, twoAway: COMBO_PAGE_SIZE, collection: COMBO_PAGE_SIZE };
+  renderComboChips();
+  renderComboSizeToggles();
+  renderComboSections();
+  updateComboFilterSummary();
+}
+
+function comboLoadMore(section) {
+  state.comboShown[section] = (state.comboShown[section] || COMBO_PAGE_SIZE) + COMBO_PAGE_SIZE;
+  renderComboSections();
+}
+
+function comboCountLabel(filteredLen, totalLen) {
+  const noun = `combo${totalLen !== 1 ? 's' : ''}`;
+  return comboFiltersActive() ? `${filteredLen} of ${totalLen} ${noun}` : `${totalLen} ${noun}`;
+}
+
+// Filtered + paginated list of combo cards for one section, plus its load-more row.
+function renderComboCards(section, filtered, ownedAnywhere, emptyText) {
+  if (filtered.length === 0) return `<div style="font-size:12px;color:var(--ink3);padding:8px 0;">${emptyText}</div>`;
+  const shown = Math.min(state.comboShown[section] || COMBO_PAGE_SIZE, filtered.length);
+  let html = filtered.slice(0, shown).map(c => renderComboCard(c, c._missing || [], ownedAnywhere)).join('');
+  if (filtered.length > shown) {
+    const next = Math.min(COMBO_PAGE_SIZE, filtered.length - shown);
+    html += `<div class="combo-load-more-row">
+      <button class="combo-load-more-btn" onclick="comboLoadMore('${section}')">Show ${next} more</button>
+      <span class="combo-load-more-count">Showing ${shown} of ${filtered.length}</span>
+    </div>`;
+  } else if (filtered.length > COMBO_PAGE_SIZE) {
+    html += `<div class="combo-load-more-row"><span class="combo-load-more-count">All ${filtered.length} shown.</span></div>`;
+  }
+  return html;
+}
+
+// "Used" = Commander Spellbook popularity (the "In N decks" figure). Missing/non-numeric
+// popularity sorts as 0. Returns a NEW array (never mutates state.combosData); default
+// order is left untouched. JS sort is stable, so ties keep their original order.
+function comboPopularity(c) {
+  const p = Number(c.popularity);
+  return Number.isFinite(p) ? p : 0;
+}
+function sortCombosForDisplay(arr) {
+  if (state.comboSort === 'popular') return [...arr].sort((a, b) => comboPopularity(b) - comboPopularity(a));
+  if (state.comboSort === 'unpopular') return [...arr].sort((a, b) => comboPopularity(a) - comboPopularity(b));
+  return arr;
+}
+
+function renderComboSections() {
+  const container = document.getElementById('comboSections');
+  if (!container) return;
+  const data = state.combosData;
+  const ownedAnywhere = computeOwnedAnywhere();
+  const filtersOn = comboFiltersActive();
+
+  // Filter, then apply the display sort within each section (sections stay grouped).
+  const includedF = sortCombosForDisplay(data.included.filter(comboMatchesFilters));
+  const oneAwayF = sortCombosForDisplay(data.oneAway.filter(comboMatchesFilters));
+  const twoAwayF = sortCombosForDisplay(data.twoAway.filter(comboMatchesFilters));
+  const collectionF = sortCombosForDisplay(data.fromCollection.filter(comboMatchesFilters));
+
+  let html = '';
+
+  // The accordion builder, shared by all four sections. While filtering, auto-open sections
+  // that have matches (and collapse empty ones) so results aren't hidden behind a closed
+  // accordion; otherwise honour the manual open/closed state in comboAccordionState.
+  const acc = (section, filtered, totalLen, statusClass, statusStyle, label, headerSuffix, emptyText) => {
+    const isOpen = filtersOn ? filtered.length > 0 : comboAccordionState[section];
+    return `<div class="accordion-header" onclick="toggleComboAccordion('${section}')">
+        <span id="combo-chev-${section}" class="accordion-chevron" style="transform:rotate(${isOpen ? 90 : 0}deg);">›</span>
+        <span class="combo-status ${statusClass}"${statusStyle ? ` style="${statusStyle}"` : ''}>${label}</span>
+        <span style="font-size:12px;color:var(--ink3);">${comboCountLabel(filtered.length, totalLen)}${headerSuffix}</span>
+      </div>
+      <div id="combo-acc-${section}" class="accordion-panel" style="display:${isOpen ? 'block' : 'none'};">
+        ${renderComboCards(section, filtered, ownedAnywhere, emptyText)}
+      </div>`;
+  };
+
+  // Complete (in-deck) combos — now a collapsible accordion like the near-miss sections.
+  // Only shown when the deck actually has complete combos.
+  const hasComplete = data.included.length > 0;
+  if (hasComplete) {
+    html += acc('included', includedF, data.included.length, 'cs-complete', '', 'Complete', ' already in this deck', 'No complete combos match your filters.');
+  }
+
+  // Near-miss group. The divider only goes above it when a Complete section sits on top —
+  // otherwise it would be the first thing in the pane and the top border would just float.
+  const groupStyle = hasComplete ? 'margin-top:24px;border-top:0.5px solid var(--border);padding-top:16px;' : '';
+  html += `<div style="${groupStyle}">
+    ${acc('oneAway', oneAwayF, data.oneAway.length, 'cs-one', '', 'One card away', '', 'None found.')}
+    ${acc('twoAway', twoAwayF, data.twoAway.length, 'cs-one', 'background:rgba(245,166,35,0.08);', 'Two cards away', '', 'None found.')}
+    ${acc('collection', collectionF, data.fromCollection.length, 'cs-complete', 'background:rgba(0,212,204,0.08);', 'Ready to complete from your collection', ' — you own every missing piece', 'No combos found where you fully own every missing piece.')}
+  </div>`;
+
+  if (filtersOn && !includedF.length && !oneAwayF.length && !twoAwayF.length && !collectionF.length) {
+    html += `<div class="empty-state" style="padding:30px 0;"><div class="empty-title">No combos match your filters</div><div class="empty-sub">Try removing a card or widening the size filter.</div></div>`;
+  }
+
+  container.innerHTML = html;
 }
 
 async function runCombos() {
@@ -2846,7 +3284,12 @@ async function runCombos() {
     const almostFull = results.almostIncluded || [];
 
     function getMissing(combo) {
-      return comboGetCards(combo).filter(name => !deckCardsLower.has(name.toLowerCase()));
+      // Front-face-normalize before comparing: deckCardsLower holds front faces only, but
+      // Commander Spellbook returns full "Front // Back" names for DFC/split pieces — a raw
+      // lowercase compare would falsely flag an in-deck DFC as missing (wrong section, a
+      // bogus "(missing)" label, and a false "ready from collection"). comboNorm matches how
+      // deckCardsLower / ownedAnywhere are built, and mirrors the Build Mode combo finder.
+      return comboGetCards(combo).filter(name => !deckCardsLower.has(comboNorm(name)));
     }
 
     const ownedAnywhere = new Set(state.collectionRaw.map(c => (c.name || '').split(' // ')[0].toLowerCase().trim()));
@@ -2863,55 +3306,14 @@ async function runCombos() {
       return missing.length > 0 && missing.every(m => ownedAnywhere.has(m.split(' // ')[0].toLowerCase().trim()));
     });
 
-    let html = '';
-    if (included.length > 0) {
-      html += `<div class="combo-section-header"><span class="combo-status cs-complete">Complete</span><span style="font-size:12px;color:var(--ink3);">${included.length} combo${included.length !== 1 ? 's' : ''} already in this deck</span></div>`;
-      html += included.map(c => renderComboCard(c, [], ownedAnywhere)).join('');
-    }
-
-    html += `<div style="margin-top:24px;border-top:0.5px solid var(--border);padding-top:16px;">
-      <div class="accordion-header" onclick="toggleComboAccordion('oneAway')">
-        <span id="combo-chev-oneAway" class="accordion-chevron" style="transform:rotate(90deg);">›</span>
-        <span class="combo-status cs-one">One card away</span>
-        <span style="font-size:12px;color:var(--ink3);">${oneAway.length} combo${oneAway.length !== 1 ? 's' : ''}</span>
-      </div>
-      <div id="combo-acc-oneAway" class="accordion-panel">
-        ${oneAway.length > 0 ? oneAway.slice(0, 15).map(c => renderComboCard(c, getMissing(c), ownedAnywhere)).join('') : '<div style="font-size:12px;color:var(--ink3);padding:8px 0;">None found.</div>'}
-        ${oneAway.length > 15 ? `<div style="font-size:11px;color:var(--ink3);padding:6px 0;">Showing top 15 of ${oneAway.length} — all are known to Urza in chat.</div>` : ''}
-      </div>
-
-      <div class="accordion-header" onclick="toggleComboAccordion('twoAway')">
-        <span id="combo-chev-twoAway" class="accordion-chevron">›</span>
-        <span class="combo-status cs-one" style="background:rgba(245,166,35,0.08);">Two cards away</span>
-        <span style="font-size:12px;color:var(--ink3);">${twoAway.length} combo${twoAway.length !== 1 ? 's' : ''}</span>
-      </div>
-      <div id="combo-acc-twoAway" class="accordion-panel" style="display:none;">
-        ${twoAway.length > 0 ? twoAway.slice(0, 15).map(c => renderComboCard(c, getMissing(c), ownedAnywhere)).join('') : '<div style="font-size:12px;color:var(--ink3);padding:8px 0;">None found.</div>'}
-        ${twoAway.length > 15 ? `<div style="font-size:11px;color:var(--ink3);padding:6px 0;">Showing top 15 of ${twoAway.length} — all are known to Urza in chat.</div>` : ''}
-      </div>
-
-      <div class="accordion-header" onclick="toggleComboAccordion('collection')">
-        <span id="combo-chev-collection" class="accordion-chevron">›</span>
-        <span class="combo-status cs-complete" style="background:rgba(0,212,204,0.08);">Ready to complete from your collection</span>
-        <span style="font-size:12px;color:var(--ink3);">${fromCollection.length} combo${fromCollection.length !== 1 ? 's' : ''} — you own every missing piece</span>
-      </div>
-      <div id="combo-acc-collection" class="accordion-panel" style="display:none;">
-        ${fromCollection.length > 0
-          ? fromCollection.slice(0, 15).map(c => renderComboCard(c, getMissing(c), ownedAnywhere)).join('')
-          : '<div style="font-size:12px;color:var(--ink3);padding:8px 0;">No combos found where you fully own every missing piece.</div>'}
-        ${fromCollection.length > 15 ? `<div style="font-size:11px;color:var(--ink3);padding:6px 0;">Showing top 15 of ${fromCollection.length} — all are known to Urza in chat.</div>` : ''}
-      </div>
-    </div>`;
-
-    if (included.length === 0 && oneAway.length === 0 && twoAway.length === 0 && fromCollection.length === 0) {
-      html = '<div class="empty-state"><div class="empty-title">No combos found</div><div class="empty-sub">This deck has no known combo lines in Commander Spellbook.</div></div>';
-    }
-
-    body.innerHTML = `<div style="padding:20px 24px;">
-      <div style="display:flex;justify-content:flex-end;margin-bottom:4px;"><a id="combosRefreshBtn" class="stat-link" style="cursor:pointer;">↻ Refresh</a></div>
-      ${html}
-    </div>`;
-    attachRefreshHandlers();
+    // Trimmed, render-ready arrays with precomputed missing lists — the single source the
+    // pane and the filters render from, on this load and after every cache restore.
+    state.combosData = {
+      included: included.map(c => trimCombo(c, [])),
+      oneAway: oneAway.map(c => trimCombo(c, getMissing(c))),
+      twoAway: twoAway.map(c => trimCombo(c, getMissing(c))),
+      fromCollection: fromCollection.map(c => trimCombo(c, getMissing(c))),
+    };
 
     state.combosSummary = {
       complete: included.map(c => `${comboGetCards(c).join(' + ')} → ${comboGetResult(c)}`),
@@ -2931,7 +3333,9 @@ async function runCombos() {
       completeRaw: included.map(c => ({ cards: comboGetCards(c), result: comboGetResult(c), missing: [] })),
       oneAwayRaw: oneAway.map(c => ({ cards: comboGetCards(c), result: comboGetResult(c), missing: getMissing(c) })),
     };
-    setDeckCache({ combosHtml: body.innerHTML, combosSummary: state.combosSummary });
+
+    initCombosPane();
+    setDeckCache({ combosData: state.combosData, combosSummary: state.combosSummary, combosUiVersion: COMBOS_UI_VERSION });
   } catch (e) {
     body.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load combos</div><div class="empty-sub">${e.message}</div></div>`;
   }
@@ -2976,7 +3380,11 @@ async function runRecommendations(focus) {
       ? `\nIMPORTANT FOCUS: The user's Stats page flagged this deck as low on ${focusLabels[focus] || focus} (a specific weakness that needs fixing). ALL of your "best" and "collection" picks should be ${focusLabels[focus] || focus} cards specifically — not general upgrades. Themed alternatives can stay theme-focused as usual.`
       : '';
 
+    const commanderColors = getCommanderColorIdentity();
+    const ciDisplay = commanderColors.length ? commanderColors.join('') : 'colourless (no coloured mana symbols allowed at all)';
+
     const prompt = `Commander deck: "${state.cards[0].split(' // ')[0]}"
+Commander colour identity: ${ciDisplay} — this is a Commander (EDH) deck, so EVERY card is restricted to this colour identity.
 Win condition: ${state.wincon || 'Not specified yet — infer the most likely win condition purely from the actual decklist below'}
 Theme: ${state.theme || 'none'}
 Power level: ${state.powerLevel}/5
@@ -2991,6 +3399,7 @@ Based on this deck's strategy, do three things:
 3. From the OWNED CARDS LIST only, pick up to 8 cards that would genuinely improve this deck.
 Prioritise cards that support the win condition.
 For EVERY recommendation, also name ONE specific card currently in the FULL decklist above that it should replace — pick the weakest or most redundant card for that particular upgrade, using its EXACT name as it appears in the decklist. Never suggest cutting the commander.
+CRITICAL — COLOUR IDENTITY: Every card you suggest, in ALL three sections, MUST be legal in this commander's colour identity (${ciDisplay}). A card's colour identity (its mana-cost pips plus any colour indicator or colour-defining rules text, e.g. hybrid mana) must be a SUBSET of the commander's. NEVER suggest an off-colour card — for example, no blue or black cards for a mono-red commander, and nothing coloured at all for a colourless commander. Colourless cards are always legal.
 CRITICAL: Only suggest cards that are REAL, printed Magic: The Gathering cards, and NEVER suggest a card that already appears in the FULL current decklist above. Do not invent card names, even ones that sound plausible for the theme. For the "collection" section, only pick names that appear verbatim in the OWNED CARDS LIST.
 Return JSON only, no markdown:
 {"best":[{"name":"Card","reason":"one sentence why it fits","cmc":"2","type":"Creature","swap_for":"Exact Name Of Existing Card To Cut"}],"themed":[{"name":"Card","reason":"one sentence","trade_off":"brief note on power vs theme trade-off","swap_for":"Exact Name Of Existing Card To Cut"}],"collection":[{"name":"Card","reason":"one sentence why it fits, picked from OWNED CARDS LIST only","swap_for":"Exact Name Of Existing Card To Cut"}]}`;
@@ -3020,6 +3429,23 @@ Return JSON only, no markdown:
     function notAlreadyInDeck(name) {
       return !deckCardsLowerForFilter.has(name.split(' // ')[0].toLowerCase().trim());
     }
+    // Hard colour-identity backstop for the AI-picked best/themed sections. The AI is told
+    // the commander's colours in the prompt, but it still slips off-colour cards through, so
+    // this drops any card whose colour identity isn't a subset of the commander's — using the
+    // Scryfall color_identity already fetched into verifiedData (no extra requests). The
+    // collection section is already colour-filtered upstream via TM.filterByColorIdentity.
+    const commanderColorSet = new Set(commanderColors);
+    const commanderCIData = state.cardData[state.cards[0].toLowerCase()] || state.cardData[state.cards[0].split(' // ')[0].toLowerCase().trim()];
+    // Only trust the filter when we actually know the commander's colours — otherwise a
+    // false-empty identity would wrongly wipe every coloured suggestion. A colourless
+    // commander legitimately has [] and IS known (its card data carries color_identity: []).
+    const commanderCIKnown = Array.isArray(commanderCIData?.color_identity) || !!state.deck?.color_identity;
+    function withinColorIdentity(name) {
+      if (!commanderCIKnown) return true;
+      const d = verifiedData[name.toLowerCase()] || verifiedData[name.split(' // ')[0].toLowerCase().trim()];
+      if (!d || !Array.isArray(d.color_identity)) return true; // verified-real but CI missing — keep rather than risk a false drop
+      return d.color_identity.every(c => commanderColorSet.has(c));
+    }
     // A swap_for suggestion is only shown if it's an exact match to something really in
     // the deck (and isn't the commander) — otherwise we just drop the swap note, not the
     // whole recommendation, since the add itself is still valid even without a clean cut.
@@ -3032,8 +3458,8 @@ Return JSON only, no markdown:
       return { ...r, swap_for: null };
     }
     const ownedNotInDeckLowerSet = new Set(ownedNotInDeckAll.map(n => n.toLowerCase()));
-    const verifiedBest = (parsed.best || []).filter(r => isVerified(r.name) && notAlreadyInDeck(r.name)).map(attachValidSwap);
-    const verifiedThemed = (parsed.themed || []).filter(r => isVerified(r.name) && notAlreadyInDeck(r.name)).map(attachValidSwap);
+    const verifiedBest = (parsed.best || []).filter(r => isVerified(r.name) && notAlreadyInDeck(r.name) && withinColorIdentity(r.name)).map(attachValidSwap);
+    const verifiedThemed = (parsed.themed || []).filter(r => isVerified(r.name) && notAlreadyInDeck(r.name) && withinColorIdentity(r.name)).map(attachValidSwap);
     // Double safety: collection picks must both be verified real cards AND actually appear in the owned list.
     const verifiedCollection = (parsed.collection || []).filter(r => isVerified(r.name) && notAlreadyInDeck(r.name) && ownedNotInDeckLowerSet.has(r.name.toLowerCase())).map(attachValidSwap);
     const droppedCount = allRecNames.length - verifiedBest.length - verifiedThemed.length - verifiedCollection.length;
@@ -3070,7 +3496,7 @@ Return JSON only, no markdown:
           </div>` : '<span></span>'}
           <a id="recsRefreshBtn" class="stat-link" style="cursor:pointer;">↻ Refresh</a>
         </div>
-        ${droppedCount > 0 ? `<div class="alert alert-warn" style="margin-bottom:14px;">Filtered out ${droppedCount} suggestion${droppedCount !== 1 ? 's' : ''} that couldn't be verified as real cards.</div>` : ''}
+        ${droppedCount > 0 ? `<div class="alert alert-warn" style="margin-bottom:14px;">Filtered out ${droppedCount} suggestion${droppedCount !== 1 ? 's' : ''} that were off-colour or couldn't be verified as real cards.</div>` : ''}
         <div class="rec-layout">
           <div>
             <div class="rec-col-header">${focus ? focusLabels[focus] || focus : 'Best cards'} <span class="badge badge-bracket" style="font-size:10px;">Performance</span></div>
@@ -3096,7 +3522,12 @@ Return JSON only, no markdown:
       themed: verifiedThemed.map(r => `${r.name} (${state.collection.has(r.name.toLowerCase()) ? 'owned' : 'need to buy'}): ${r.reason}${r.trade_off ? ' — trade-off: ' + r.trade_off : ''}${r.swap_for ? ` [suggested cut to make room: ${r.swap_for}]` : ''}`),
       collection: verifiedCollection.map(r => `${r.name} (already owned, sitting in bulk): ${r.reason}${r.swap_for ? ` [suggested cut to make room: ${r.swap_for}]` : ''}`),
     };
-    if (!focus) setDeckCache({ recsHtml: container.innerHTML, recsSummary: state.recsSummary });
+    // These cards were just fetched into state.cardData (verifiedData), so their oracle text
+    // is available — record the names so Urza's chat context can ground discussion of them
+    // too, not just the deck's own cards. (Session-only; a cache restore skips runCombos so
+    // these aren't in cardData then, and buildCardOracleContext just omits them.)
+    state.recsCardNames = [...verifiedBest, ...verifiedThemed, ...verifiedCollection].map(r => r.name);
+    if (!focus) setDeckCache({ recsHtml: container.innerHTML, recsSummary: state.recsSummary, recsVersion: RECS_VERSION });
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><div class="empty-title">Couldn't load recommendations</div><div class="empty-sub">${e.message}</div></div>`;
   }
@@ -3171,11 +3602,37 @@ HOW TO RESPOND:
 - If collection data is available, flag owned cards with ✓ and unowned with ✗
 - CRITICAL: wrap every specific real MTG card name you mention in **double asterisks**, e.g. **Sol Ring**, so it renders as a clickable card link. Only do this for real, verified card names — never wrap something you're not confident is a real printed card.
 - Never invent or hallucinate card names, even ones that sound plausible for the deck's theme
+- CRITICAL — CARD FUNCTION: Describe what a card does STRICTLY from the oracle text given in CARD ORACLE TEXT below. Do NOT describe a card's abilities, cost, or type from memory. If you want to discuss a card whose text isn't in that list (or is marked unavailable), say you don't have its text and can't be sure what it does — never guess or paraphrase from recollection.
 
 TONE: Direct, smart, slightly casual. Australian English. No corporate language. No excessive enthusiasm.`;
 
+// Real oracle text for every unique card in the deck, plus any recommended cards Urza might
+// be asked about — so it reasons from what cards actually DO, not from the name (the whole
+// point of DEVELOPMENT_PRINCIPLES.md). Deduped by front face; full oracle text, NOT truncated
+// — a 100-card deck is only ~7K tokens, well inside the model's context window. The old code
+// dumped Object.values(state.cardData) (2-3 duplicate entries per card) capped at 60 and
+// clipped to 100 chars, so most of the deck was missing or half-described.
+function buildCardOracleContext() {
+  const seen = new Set();
+  const lines = [];
+  const add = (name) => {
+    const key = name.split(' // ')[0].toLowerCase().trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    const d = state.cardData[name.toLowerCase()] || state.cardData[key];
+    if (!d || !d.type_line) { lines.push(`${name} | (oracle text unavailable — do NOT describe what this card does)`); return; }
+    const hasPT = d.power != null && d.power !== '' && d.toughness != null && d.toughness !== '';
+    const pt = hasPT ? ` [${d.power}/${d.toughness}]` : '';
+    const oracle = (d.oracle_text || '').replace(/\s*\n\s*/g, ' ').trim();
+    lines.push(`${d.name} | ${d.mana_cost || 'no cost'} | ${d.type_line}${pt}${oracle ? ` | ${oracle}` : ''}`);
+  };
+  state.cards.forEach(add);                    // every card in the deck
+  (state.recsCardNames || []).forEach(add);    // recommended cards, so "should I add X?" is grounded too
+  return lines.join('\n');
+}
+
 function buildContext() {
-  const cardContext = Object.values(state.cardData).slice(0, 60).map(c => `${c.name} [${c.mana_cost || '0'}] ${c.type_line}: ${(c.oracle_text || '').slice(0, 100)}`).join('\n');
+  const cardContext = buildCardOracleContext();
   const recsContext = state.recsSummary
     ? `\nRECOMMENDATIONS TAB CONTEXT (what the user currently sees):\nBest cards (performance):\n${(state.recsSummary.best || []).map(r => '- ' + r).join('\n') || '- None'}\nFrom your collection (already owned, sitting in bulk):\n${(state.recsSummary.collection || []).map(r => '- ' + r).join('\n') || '- None found'}\nThemed alternatives:\n${(state.recsSummary.themed || []).map(r => '- ' + r).join('\n') || '- None'}`
     : '\nRECOMMENDATIONS TAB CONTEXT: Not loaded yet — tell the user to check the Recommendations tab.';
@@ -3194,7 +3651,7 @@ Collection loaded: ${state.collection.size > 0 ? 'Yes — ' + state.collection.s
 ${recsContext}
 ${combosContext}
 
-CARD ORACLE TEXT:
+CARD ORACLE TEXT (the real, authoritative text for every card below — format: name | mana cost | type [power/toughness] | oracle text. Reason about what a card does ONLY from this; if a card isn't listed here, say you don't have its text rather than guessing):
 ${cardContext}`;
 }
 
@@ -3203,8 +3660,10 @@ function loadChatHistory(history) {
   document.getElementById('chatContext').innerHTML = `<strong>Commander:</strong> ${state.cards[0]}<br><strong>Cards:</strong> ${state.cards.length}<br><strong>Win-con:</strong> ${state.wincon || 'Not set'}<br><strong>Theme:</strong> ${state.theme || 'Not set'}`;
   const container = document.getElementById('chatMessages');
   container.innerHTML = '';
-  history.forEach(msg => {
-    // The very first user message is our internal intake prompt (includes full deck context) — skip showing it raw.
+  history.forEach((msg, i) => {
+    // The first user message is our internal intake intro — never show it raw. New chats
+    // use a short intro; legacy chats embedded the full 'DECK CONTEXT:' dump. Hide either.
+    if (i === 0 && msg.role === 'user') return;
     if (msg.role === 'user' && msg.content.includes('DECK CONTEXT:')) return;
     addChatMsg(msg.role, msg.content, false);
   });
@@ -3216,15 +3675,18 @@ function persistChatHistory() {
 }
 
 async function startChat() {
-  const context = buildContext();
-  const prompt = `${context}\n\nPlease introduce yourself briefly, confirm you have read the deck, and ask the three intake questions about: (1) win condition — noting it's fine if they don't know, (2) theme and how strictly to stick to it, (3) power level on a 1-5 scale.`;
-  state.chatHistory = [{ role: 'user', content: prompt }];
+  // Keep the intro user message short — the deck context + full oracle text ride in the
+  // `system` param, not the message. Persisting the whole oracle dump into chat_history
+  // would bloat the saved row and get re-sent (doubled with the system context) every turn.
+  // This first user message is hidden from the rendered transcript (see loadChatHistory).
+  const introPrompt = `Please introduce yourself briefly, confirm you've read the "${state.cards[0]}" deck, and ask the three intake questions about: (1) win condition — noting it's fine if they don't know, (2) theme and how strictly to stick to it, (3) power level on a 1-5 scale.`;
+  state.chatHistory = [{ role: 'user', content: introPrompt }];
   document.getElementById('chatContext').innerHTML = `<strong>Commander:</strong> ${state.cards[0]}<br><strong>Cards:</strong> ${state.cards.length}<br><strong>Win-con:</strong> ${state.wincon || 'Not set'}<br><strong>Theme:</strong> ${state.theme || 'Not set'}`;
   const typingId = addChatTyping();
   try {
     const data = await safeFetchJson('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system: SYSTEM_PROMPT, messages: state.chatHistory }),
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system: buildContext(), messages: state.chatHistory }),
     });
     removeChatTyping(typingId);
     const reply = data.content?.[0]?.text || 'Something went wrong.';
